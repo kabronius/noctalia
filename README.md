@@ -11,6 +11,107 @@ are designed as one cohesive shell instead of a collection of unrelated panels a
 > [!IMPORTANT]
 > Noctalia v5 is currently in Beta. While the core features and architecture are stabilizing, you may still encounter occasional configuration or behavior adjustments as we prepare for the final release.
 
+## Ubuntu 24.04 port (branch `ubuntu-24.04`)
+
+This branch is upstream **v5.0.1** (`f95e95caf`) adapted to build and run on **Ubuntu 24.04 LTS (noble)**. Upstream
+targets newer libraries than noble ships; the port keeps every feature and changes only how the code talks to those
+libraries. Each change is a separate commit on top of the tag, so `git log v5.0.1..ubuntu-24.04` shows the full delta.
+
+| Library | Upstream expects | Ubuntu 24.04 ships |
+| --- | --- | --- |
+| sdbus-c++ | 2.x | 1.4.0 |
+| WirePlumber | 0.5 | 0.4 |
+| libwayland-client | provides `wl_proxy_get_display()` | 1.22, no such call |
+| stb (`libstb-dev`) | includes `stb_image_resize2.h` | header missing |
+| C++23 compiler | default `g++` | `g++-14` (default is g++-13) |
+
+### Commits
+
+**1. `Port to Ubuntu 24.04 libraries (sdbus-c++ 1.4, WirePlumber 0.4)`**: 37 files under `src/` plus `meson.build`.
+
+| Area | sdbus-c++ 2.x / upstream | sdbus-c++ 1.4 / this branch |
+| --- | --- | --- |
+| Exported D-Bus objects (notifications, tray watcher, MPRIS, agents, debug, KWin bridge) | `addVTable(registerMethod(...), ...)` | `registerMethod/Signal/Property(...)` per member, then `finishRegistration()` |
+| Bus and error names | strong types `sdbus::ServiceName`, `sdbus::Error::Name` | `std::string` |
+| Async call replies | `std::optional<sdbus::Error>` | `const sdbus::Error*` (`nullptr` on success) |
+| Event loop integration (`session_bus`, `system_bus`, poll sources) | `processPendingEvent()`, `PollData::eventFd` | `processPendingRequests()`, `PollData::fd` |
+| Structured values (tray tooltips, dbusmenu, NetworkManager, BlueZ) | decoded as `std::tuple` | decoded as `sdbus::Struct<...>` |
+| UPower charge threshold (new in v5.0.1) | `getProperty(std::string_view)`, optional error | `std::string` arguments, `const sdbus::Error*` |
+| WirePlumber mixer | `wp_core_new(ctx, nullptr, nullptr)`, `wp_core_load_component(..., nullptr, ...)` | 0.4 signatures |
+| Virtual keyboard (`wayland_connection`, `virtual_keyboard_service`) | display from `wl_proxy_get_display()` | `wl_display*` passed explicitly |
+| `meson.build` | requires `wireplumber-0.5` and system `stb_image_resize2.h` | falls back to `wireplumber-0.4`; uses `third_party/stb` |
+
+`third_party/stb/stb/stb_image_resize2.h` (stb v2.18, public domain) is vendored in the same commit so that every commit
+builds.
+
+**2. `Subscribe D-Bus proxies to their signals on sdbus-c++ 1.4`**: 33 lines in 14 files.
+
+In sdbus-c++ 2.x, `proxy->uponSignal(...).call(...)` subscribes immediately. In 1.4 it only stores the handler; the
+match rule is installed by `IProxy::finishRegistration()`. Commit 1 alone compiles, but no proxy ever receives a
+signal. Consequences observed before this commit:
+
+| Service | Lost signal | Symptom |
+| --- | --- | --- |
+| Tray | `NameOwnerChanged` | icons of closed apps stay; reopening the app adds a duplicate |
+| logind | `PrepareForSleep`, `Lock`, `Unlock` | `lockscreen.lock_before_suspend` cannot lock before sleep |
+| UPower, power profiles | `PropertiesChanged`, `DeviceAdded/Removed` | battery and profile updated only by polling |
+| NetworkManager, wpa_supplicant, iwd | `PropertiesChanged`, scan and BSS signals | network state updated only by polling |
+| BlueZ | `InterfacesAdded/Removed`, `PropertiesChanged` | devices appear late or not at all |
+| MPRIS, accounts, fingerprint, keyboard backlight, notification and secret-service watchers | name-owner and property signals | stale state until the next poll |
+
+`finishRegistration()` is called once per proxy, right after its last `uponSignal()` and before the proxy is moved
+into a container. A standalone test against `libsdbus-c++` 1.4.0 receives 0 `NameOwnerChanged` signals without the
+call and 2 with it.
+
+**3. `Add Debian packaging for Ubuntu 24.04`**: `debian/` with noble build dependencies (`libsdbus-c++-dev` 1.4,
+`libwireplumber-0.4-dev`, `g++-14`).
+
+Blur through `ext-background-effect` needs no change on this branch: upstream v5.0.1 already handles the
+wayland-protocols 1.45 definition of the `blur` capability bit (`873de57e2`).
+
+### Build on Ubuntu 24.04
+
+```sh
+sudo apt install build-essential debhelper meson ninja-build pkg-config g++-14 \
+  libwayland-dev wayland-protocols libegl-dev libgles-dev libepoxy-dev \
+  libfreetype-dev libfontconfig-dev libcairo2-dev libpango1.0-dev libharfbuzz-dev \
+  librsvg2-dev libxkbcommon-dev libglib2.0-dev libsdbus-c++-dev libsecret-1-dev \
+  libsodium-dev libpolkit-agent-1-dev libpolkit-gobject-1-dev libpipewire-0.3-dev \
+  libwireplumber-0.4-dev libcurl4-openssl-dev libqalculate-dev libpam0g-dev \
+  libxml2-dev libical-dev libtomlplusplus-dev libstb-dev libwebp-dev libjxl-dev \
+  libsndfile1-dev libjemalloc-dev libmd4c-dev
+
+git clone -b ubuntu-24.04 https://github.com/kabronius/noctalia.git
+cd noctalia
+
+# Binary in build-release/noctalia
+CC=gcc-14 CXX=g++-14 meson setup build-release --buildtype=release -Dprefix=/usr
+meson compile -C build-release
+
+# Or a .deb in the parent directory
+dpkg-buildpackage -b -us -uc --no-sign
+```
+
+### Verification status
+
+Checked on Ubuntu 24.04 with niri 26.04:
+
+- full build with g++-14 against sdbus-c++ 1.4.0 and WirePlumber 0.4; package `5.0.1-0ubuntu1~24.04`;
+- tray: a StatusNotifierItem that exits is removed (`item unregistered` in the log);
+- compositor blur requested and applied (`blur-effect-create`);
+- Polkit authentication agent active, notification daemon owning `org.freedesktop.Notifications`, MPRIS discovery
+  active.
+
+Not exercised: `PrepareForSleep` during a real suspend, fingerprint authentication, iwd and wpa_supplicant backends
+(the test machine uses NetworkManager).
+
+### Updating to a newer upstream release
+
+Rebase the three commits onto the new tag and rebuild. Code added upstream after v5.0.1 may again use sdbus-c++ 2.x
+APIs; the compiler reports each one, and the table under commit 1 lists the matching 1.4 replacement. Every new
+`uponSignal()` on a proxy also needs a `finishRegistration()` after it.
+
+
 <p><br/></p>
 
 <p align="center">
