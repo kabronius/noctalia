@@ -25,7 +25,7 @@ namespace {
 
   constexpr Logger kLog("bluetooth");
 
-  const sdbus::ServiceName kBluezBusName{"org.bluez"};
+  const std::string kBluezBusName{"org.bluez"};
   const sdbus::ObjectPath kRootPath{"/"};
   constexpr auto kAdapterInterface = "org.bluez.Adapter1";
   constexpr auto kDeviceInterface = "org.bluez.Device1";
@@ -503,21 +503,21 @@ void BluetoothService::registerIpc(IpcService& ipc, StateFeedbackCallback stateF
   };
 
   ipc.bind(noctalia::cli::msg::bluetoothEnable, [setBluetooth](const std::string& args) -> std::string {
-    if (auto err = rejectArgs("bluetooth-enable", args); err.has_value()) {
+    if (auto err = rejectArgs("bluetooth-enable", args); err) {
       return *err;
     }
     return setBluetooth(true);
   });
 
   ipc.bind(noctalia::cli::msg::bluetoothDisable, [setBluetooth](const std::string& args) -> std::string {
-    if (auto err = rejectArgs("bluetooth-disable", args); err.has_value()) {
+    if (auto err = rejectArgs("bluetooth-disable", args); err) {
       return *err;
     }
     return setBluetooth(false);
   });
 
   ipc.bind(noctalia::cli::msg::bluetoothToggle, [this, setBluetooth](const std::string& args) -> std::string {
-    if (auto err = rejectArgs("bluetooth-toggle", args); err.has_value()) {
+    if (auto err = rejectArgs("bluetooth-toggle", args); err) {
       return *err;
     }
     if (!hasStateSnapshot()) {
@@ -529,7 +529,7 @@ void BluetoothService::registerIpc(IpcService& ipc, StateFeedbackCallback stateF
   ipc.bind(
       noctalia::cli::msg::bluetoothStatus,
       [this](const std::string& args) -> std::string {
-        if (auto err = rejectArgs("bluetooth-status", args); err.has_value()) {
+        if (auto err = rejectArgs("bluetooth-status", args); err) {
           return *err;
         }
         if (!hasStateSnapshot()) {
@@ -547,8 +547,8 @@ void BluetoothService::refresh() {
   }
   m_impl->root->callMethodAsync("GetManagedObjects")
       .onInterface(kObjectManagerInterface)
-      .uponReplyInvoke([this](std::optional<sdbus::Error> err, ManagedObjects objects) {
-        if (err.has_value()) {
+      .uponReplyInvoke([this](const sdbus::Error* err, ManagedObjects objects) {
+        if (err) {
           kLog.debug("GetManagedObjects failed: {}", err->what());
           return;
         }
@@ -596,7 +596,7 @@ void BluetoothService::setPowered(bool enabled) {
     if (!enabled && m_state.discovering) {
       m_impl->adapter->callMethodAsync("StopDiscovery")
           .onInterface(kAdapterInterface)
-          .uponReplyInvoke([](std::optional<sdbus::Error>) {});
+          .uponReplyInvoke([](const sdbus::Error*) {});
     }
     m_impl->adapter->setProperty("Powered").onInterface(kAdapterInterface).toValue(enabled);
   } catch (const sdbus::Error& e) {
@@ -636,8 +636,8 @@ void BluetoothService::startDiscovery() {
   try {
     m_impl->adapter->callMethodAsync("StartDiscovery")
         .onInterface(kAdapterInterface)
-        .uponReplyInvoke([](std::optional<sdbus::Error> err) {
-          if (err.has_value()) {
+        .uponReplyInvoke([](const sdbus::Error* err) {
+          if (err) {
             kLog.warn("StartDiscovery failed: {}", err->what());
           }
         });
@@ -653,8 +653,8 @@ void BluetoothService::stopDiscovery() {
   try {
     m_impl->adapter->callMethodAsync("StopDiscovery")
         .onInterface(kAdapterInterface)
-        .uponReplyInvoke([](std::optional<sdbus::Error> err) {
-          if (err.has_value()) {
+        .uponReplyInvoke([](const sdbus::Error* err) {
+          if (err) {
             kLog.debug("StopDiscovery failed: {}", err->what());
           }
         });
@@ -675,8 +675,8 @@ bool BluetoothService::connect(const std::string& devicePath) {
   try {
     proxy->callMethodAsync("Connect")
         .onInterface(kDeviceInterface)
-        .uponReplyInvoke([this, devicePath](std::optional<sdbus::Error> err) {
-          if (err.has_value()) {
+        .uponReplyInvoke([this, devicePath](const sdbus::Error* err) {
+          if (err) {
             kLog.warn("Device.Connect failed {}: {}", devicePath, err->what());
             if (auto* dev = findDevice(devicePath)) {
               dev->connecting = false;
@@ -703,8 +703,8 @@ bool BluetoothService::disconnectDevice(const std::string& devicePath) {
   try {
     proxy->callMethodAsync("Disconnect")
         .onInterface(kDeviceInterface)
-        .uponReplyInvoke([devicePath](std::optional<sdbus::Error> err) {
-          if (err.has_value()) {
+        .uponReplyInvoke([devicePath](const sdbus::Error* err) {
+          if (err) {
             kLog.warn("Device.Disconnect failed {}: {}", devicePath, err->what());
           }
         });
@@ -727,8 +727,8 @@ bool BluetoothService::pair(const std::string& devicePath) {
   try {
     proxy->callMethodAsync("Pair")
         .onInterface(kDeviceInterface)
-        .uponReplyInvoke([this, devicePath](std::optional<sdbus::Error> err) {
-          if (err.has_value()) {
+        .uponReplyInvoke([this, devicePath](const sdbus::Error* err) {
+          if (err) {
             kLog.warn("Device.Pair failed {}: {}", devicePath, err->what());
             if (auto* dev = findDevice(devicePath)) {
               dev->connecting = false;
@@ -755,8 +755,8 @@ bool BluetoothService::cancelPair(const std::string& devicePath) {
   try {
     proxy->callMethodAsync("CancelPairing")
         .onInterface(kDeviceInterface)
-        .uponReplyInvoke([devicePath](std::optional<sdbus::Error> err) {
-          if (err.has_value()) {
+        .uponReplyInvoke([devicePath](const sdbus::Error* err) {
+          if (err) {
             kLog.debug("CancelPairing failed {}: {}", devicePath, err->what());
           }
         });
@@ -787,8 +787,8 @@ void BluetoothService::forget(const std::string& devicePath) {
     m_impl->adapter->callMethodAsync("RemoveDevice")
         .onInterface(kAdapterInterface)
         .withArguments(sdbus::ObjectPath{devicePath})
-        .uponReplyInvoke([devicePath](std::optional<sdbus::Error> err) {
-          if (err.has_value()) {
+        .uponReplyInvoke([devicePath](const sdbus::Error* err) {
+          if (err) {
             kLog.warn("RemoveDevice failed {}: {}", devicePath, err->what());
           }
         });

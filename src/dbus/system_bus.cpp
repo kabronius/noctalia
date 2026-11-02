@@ -8,7 +8,7 @@
 namespace {
   constexpr Logger kLog("system_bus");
   constexpr auto kDbusInterface = "org.freedesktop.DBus";
-  const sdbus::ServiceName kDbusName{kDbusInterface};
+  const std::string kDbusName{kDbusInterface};
   const sdbus::ObjectPath kDbusPath{"/org/freedesktop/DBus"};
 
   constexpr int kMaxEventsPerDispatch = 16;
@@ -43,13 +43,13 @@ bool SystemBus::nameHasOwner(std::string_view name) const {
   return hasOwner;
 }
 
-void SystemBus::processPendingEvents() {
+void SystemBus::processPendingRequests() {
   m_hasPendingEvents = false;
 
   const auto batchStart = std::chrono::steady_clock::now();
   for (int processed = 0; processed < kMaxEventsPerDispatch; ++processed) {
     const auto eventStart = std::chrono::steady_clock::now();
-    const bool processedEvent = m_connection->processPendingEvent();
+    const bool processedEvent = m_connection->processPendingRequest();
     if (!processedEvent) {
       return;
     }

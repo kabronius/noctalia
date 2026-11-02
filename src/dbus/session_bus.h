@@ -10,7 +10,7 @@ public:
   [[nodiscard]] sdbus::IConnection& connection() noexcept { return *m_connection; }
   [[nodiscard]] sdbus::IConnection::PollData getPollData() const;
   [[nodiscard]] bool hasPendingEvents() const noexcept { return m_hasPendingEvents; }
-  void processPendingEvents();
+  void processPendingRequests();
 
 private:
   std::unique_ptr<sdbus::IConnection> m_connection;

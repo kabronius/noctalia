@@ -220,7 +220,7 @@ namespace {
       constexpr auto kIface = "org.freedesktop.Application";
 
       auto dbus = sdbus::createProxy(
-          *connection, sdbus::ServiceName{"org.freedesktop.DBus"}, sdbus::ObjectPath{"/org/freedesktop/DBus"}
+          *connection, "org.freedesktop.DBus", sdbus::ObjectPath{"/org/freedesktop/DBus"}
       );
       bool hasOwner = false;
       dbus->callMethod("NameHasOwner")
@@ -233,7 +233,7 @@ namespace {
       }
 
       auto proxy = sdbus::createProxy(
-          *connection, sdbus::ServiceName{options.dbusAppId},
+          *connection, options.dbusAppId,
           sdbus::ObjectPath{dbusObjectPathForAppId(options.dbusAppId)}
       );
       auto platformData = dbusPlatformData(options.activationToken);

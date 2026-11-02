@@ -22,7 +22,7 @@ namespace {
 
   constexpr Logger kLog("keyboard-backlight");
 
-  const sdbus::ServiceName kUpowerBusName{"org.freedesktop.UPower"};
+  const std::string kUpowerBusName{"org.freedesktop.UPower"};
   const sdbus::ObjectPath kUpowerPath{"/org/freedesktop/UPower"};
   constexpr auto kUpowerInterface = "org.freedesktop.UPower";
   constexpr auto kKbdBacklightInterface = "org.freedesktop.UPower.KbdBacklight";

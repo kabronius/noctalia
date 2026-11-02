@@ -18,13 +18,13 @@ namespace {
   constexpr Logger kLog("notification");
 } // namespace
 
-static const sdbus::ServiceName kBusName{notification_dbus::kFreedesktopNotificationsBusName};
+static const std::string kBusName{notification_dbus::kFreedesktopNotificationsBusName};
 static const sdbus::ObjectPath kObjectPath{"/org/freedesktop/Notifications"};
 static constexpr auto kInterface = "org.freedesktop.Notifications";
 
 namespace {
 
-  const sdbus::ServiceName kDbusBusName{"org.freedesktop.DBus"};
+  const std::string kDbusBusName{"org.freedesktop.DBus"};
   const sdbus::ObjectPath kDbusObjectPath{"/org/freedesktop/DBus"};
   constexpr auto kDbusInterface = "org.freedesktop.DBus";
 
@@ -69,7 +69,7 @@ namespace notification_dbus {
     const char* detail = reply == kNameReplyExists ? "org.freedesktop.Notifications is owned by another service"
         : reply == kNameReplyInQueue               ? "org.freedesktop.Notifications acquisition was queued"
                                                    : "unexpected RequestName reply";
-    throw sdbus::Error(sdbus::Error::Name{"org.freedesktop.DBus.Error.AccessDenied"}, detail);
+    throw sdbus::Error("org.freedesktop.DBus.Error.AccessDenied", detail);
   }
 
   bool ownsBusName(sdbus::IConnection& connection) {
@@ -94,9 +94,7 @@ NotificationService::NotificationService(SessionBus& bus, NotificationManager& m
   try {
     m_object = sdbus::createObject(m_bus.connection(), kObjectPath);
 
-    m_object
-        ->addVTable(
-            sdbus::registerMethod("Notify")
+    m_object->registerMethod("Notify")
                 .withInputParamNames(
                     "app_name", "replaces_id", "app_icon", "summary", "body", "actions", "hints", "expire_timeout"
                 )
@@ -108,35 +106,35 @@ NotificationService::NotificationService(SessionBus& bus, NotificationManager& m
                                    const std::map<std::string, sdbus::Variant>& hints, int32_t expire_timeout
                                ) {
                   return onNotify(app_name, replaces_id, app_icon, summary, body, actions, hints, expire_timeout);
-                }),
-
-            sdbus::registerMethod("GetCapabilities").withOutputParamNames("capabilities").implementedAs([this]() {
+                })
+        .onInterface(kInterface);
+    m_object->registerMethod("GetCapabilities").withOutputParamNames("capabilities").implementedAs([this]() {
               return onGetCapabilities();
-            }),
-
-            sdbus::registerMethod("GetNotifications")
+            })
+        .onInterface(kInterface);
+    m_object->registerMethod("GetNotifications")
                 .withOutputParamNames("active_notifications")
-                .implementedAs([this]() { return onGetNotifications(); }),
-
-            sdbus::registerMethod("GetServerInformation")
+                .implementedAs([this]() { return onGetNotifications(); })
+        .onInterface(kInterface);
+    m_object->registerMethod("GetServerInformation")
                 .withOutputParamNames("name", "vendor", "version", "spec_version")
-                .implementedAs([this]() { return onGetServerInformation(); }),
-
-            sdbus::registerMethod("CloseNotification").withInputParamNames("id").implementedAs([this](uint32_t id) {
+                .implementedAs([this]() { return onGetServerInformation(); })
+        .onInterface(kInterface);
+    m_object->registerMethod("CloseNotification").withInputParamNames("id").implementedAs([this](uint32_t id) {
               onCloseNotification(id);
-            }),
-
-            sdbus::registerMethod("InvokeAction")
+            })
+        .onInterface(kInterface);
+    m_object->registerMethod("InvokeAction")
                 .withInputParamNames("id", "action_key")
-                .implementedAs([this](uint32_t id, const std::string& actionKey) { onInvokeAction(id, actionKey); }),
-
-            sdbus::registerSignal("NotificationClosed").withParameters<uint32_t, uint32_t>("id", "reason"),
-
-            sdbus::registerSignal("ActivationToken").withParameters<uint32_t, std::string>("id", "activation_token"),
-
-            sdbus::registerSignal("ActionInvoked").withParameters<uint32_t, std::string>("id", "action_key")
-        )
-        .forInterface(kInterface);
+                .implementedAs([this](uint32_t id, const std::string& actionKey) { onInvokeAction(id, actionKey); })
+        .onInterface(kInterface);
+    m_object->registerSignal("NotificationClosed").withParameters<uint32_t, uint32_t>("id", "reason")
+        .onInterface(kInterface);
+    m_object->registerSignal("ActivationToken").withParameters<uint32_t, std::string>("id", "activation_token")
+        .onInterface(kInterface);
+    m_object->registerSignal("ActionInvoked").withParameters<uint32_t, std::string>("id", "action_key")
+        .onInterface(kInterface);
+    m_object->finishRegistration();
 
     notification_dbus::acquireBusName(m_bus.connection());
     m_nameAcquired = true;
@@ -303,21 +301,6 @@ namespace notification_dbus {
       } catch (const sdbus::Error&) {
       }
 
-      try {
-        const auto data = value.get<std::tuple<
-            std::int32_t, std::int32_t, std::int32_t, bool, std::int32_t, std::int32_t, std::vector<std::uint8_t>>>();
-        NotificationImageData out;
-        out.width = std::get<0>(data);
-        out.height = std::get<1>(data);
-        out.rowStride = std::get<2>(data);
-        out.hasAlpha = std::get<3>(data);
-        out.bitsPerSample = std::get<4>(data);
-        out.channels = std::get<5>(data);
-        out.data = std::get<6>(data);
-        return out;
-      } catch (const sdbus::Error&) {
-      }
-
       return std::nullopt;
     }
 
@@ -461,7 +444,7 @@ std::vector<std::map<std::string, sdbus::Variant>> NotificationService::onGetNot
 void NotificationService::onCloseNotification(uint32_t id) {
   if (!m_manager.close(id, CloseReason::ClosedByCall)) {
     throw sdbus::Error(
-        sdbus::Error::Name{"org.freedesktop.Notifications.Error.NotFound"}, "notification id was not found"
+        "org.freedesktop.Notifications.Error.NotFound", "notification id was not found"
     );
   }
 }
@@ -472,7 +455,7 @@ void NotificationService::emitClose(uint32_t id, CloseReason reason) {
   }
   try {
     // Only queue the outgoing signal here. Do NOT pump the bus with
-    // processPendingEvent(): emitClose runs inside NotificationManager::close()
+    // processPendingRequest(): emitClose runs inside NotificationManager::close()
     // (itself invoked from the session-bus dispatch loop), and synchronously
     // dispatching the next queued incoming Notify/CloseNotification re-enters the
     // manager mid-mutation — invalidating live references/indices and crashing
@@ -487,13 +470,13 @@ void NotificationService::onInvokeAction(uint32_t id, const std::string& actionK
   const std::string sanitizedKey = StringUtils::truncateUtf8(actionKey, kMaxStringLen);
   if (sanitizedKey.empty()) {
     throw sdbus::Error(
-        sdbus::Error::Name{"org.freedesktop.Notifications.Error.InvalidAction"}, "action_key must not be empty"
+        "org.freedesktop.Notifications.Error.InvalidAction", "action_key must not be empty"
     );
   }
 
   if (!m_manager.invokeAction(id, sanitizedKey, false)) {
     throw sdbus::Error(
-        sdbus::Error::Name{"org.freedesktop.Notifications.Error.InvalidAction"},
+        "org.freedesktop.Notifications.Error.InvalidAction",
         "action_key is not available for this notification"
     );
   }

@@ -16,7 +16,7 @@ namespace {
 
   constexpr Logger kLog("wpa_supplicant");
 
-  const sdbus::ServiceName kWpaBusName{"fi.w1.wpa_supplicant1"};
+  const std::string kWpaBusName{"fi.w1.wpa_supplicant1"};
   const sdbus::ObjectPath kWpaObjectPath{"/fi/w1/wpa_supplicant1"};
   constexpr auto kWpaInterface = "fi.w1.wpa_supplicant1";
   constexpr auto kWpaIfaceInterface = "fi.w1.wpa_supplicant1.Interface";
@@ -32,7 +32,7 @@ namespace {
   template <typename T>
   T getPropertyOr(sdbus::IProxy& proxy, std::string_view iface, std::string_view prop, T fallback) {
     try {
-      return proxy.getProperty(prop).onInterface(std::string(iface)).template get<T>();
+      return proxy.getProperty(std::string(prop)).onInterface(std::string(iface)).template get<T>();
     } catch (const sdbus::Error&) {
       return fallback;
     }
@@ -102,7 +102,7 @@ namespace {
 WpaSupplicantService::WpaSupplicantService(SystemBus& bus) : m_bus(bus) {
   if (!bus.nameHasOwner("fi.w1.wpa_supplicant1")) {
     throw sdbus::Error(
-        sdbus::Error::Name{"org.freedesktop.DBus.Error.ServiceUnknown"},
+        "org.freedesktop.DBus.Error.ServiceUnknown",
         "The name fi.w1.wpa_supplicant1 was not provided by any .service files"
     );
   }

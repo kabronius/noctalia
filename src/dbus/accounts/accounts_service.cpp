@@ -16,7 +16,7 @@ namespace {
 
   constexpr Logger kLog("accounts");
 
-  const sdbus::ServiceName kAccountsBusName{"org.freedesktop.Accounts"};
+  const std::string kAccountsBusName{"org.freedesktop.Accounts"};
   const sdbus::ObjectPath kAccountsObjectPath{"/org/freedesktop/Accounts"};
   constexpr auto kAccountsInterface = "org.freedesktop.Accounts";
   constexpr auto kUserInterface = "org.freedesktop.Accounts.User";
@@ -25,7 +25,7 @@ namespace {
   template <typename T>
   T getPropertyOr(sdbus::IProxy& proxy, std::string_view iface, std::string_view propertyName, T fallback) {
     try {
-      const sdbus::Variant value = proxy.getProperty(propertyName).onInterface(iface);
+      const sdbus::Variant value = proxy.getProperty(std::string(propertyName)).onInterface(std::string(iface));
       return value.get<T>();
     } catch (const sdbus::Error&) {
       return fallback;
@@ -49,7 +49,7 @@ AccountsService::AccountsService(SystemBus& bus) : m_bus(bus) {
   m_sessionUid = ::getuid();
   if (m_sessionUid == static_cast<uid_t>(-1)) {
     throw sdbus::Error(
-        sdbus::Error::Name{"org.freedesktop.DBus.Error.Failed"}, "failed to resolve session uid via getuid()"
+        "org.freedesktop.DBus.Error.Failed", "failed to resolve session uid via getuid()"
     );
   }
 
@@ -66,7 +66,7 @@ AccountsService::AccountsService(SystemBus& bus) : m_bus(bus) {
   const std::optional<uid_t> reportedUid = readUserUid(*m_userProxy);
   if (!reportedUid.has_value() || *reportedUid != m_sessionUid) {
     throw sdbus::Error(
-        sdbus::Error::Name{"org.freedesktop.DBus.Error.Failed"}, "AccountsService user Uid does not match session uid"
+        "org.freedesktop.DBus.Error.Failed", "AccountsService user Uid does not match session uid"
     );
   }
 

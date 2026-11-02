@@ -26,7 +26,7 @@ public:
   [[nodiscard]] std::int64_t inhibitLocks() const noexcept { return m_inhibitLocks; }
   [[nodiscard]] bool hasPendingEvents() const noexcept { return m_hasPendingEvents; }
   [[nodiscard]] sdbus::IConnection::PollData getPollData() const;
-  void processPendingEvents();
+  void processPendingRequests();
   void setChangeCallback(ChangeCallback callback);
 
 private:

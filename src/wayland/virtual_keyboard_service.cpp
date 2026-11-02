@@ -8,7 +8,7 @@
 #include <cstring>
 #include <linux/input-event-codes.h>
 #include <unistd.h>
-#include <wayland-client-core.h>
+#include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
 namespace {
@@ -37,19 +37,20 @@ VirtualKeyboardService::VirtualKeyboardService() = default;
 
 VirtualKeyboardService::~VirtualKeyboardService() { cleanup(); }
 
-bool VirtualKeyboardService::bind(zwp_virtual_keyboard_manager_v1* manager, wl_seat* seat) {
+bool VirtualKeyboardService::bind(zwp_virtual_keyboard_manager_v1* manager, wl_seat* seat, wl_display* display) {
   if (manager == nullptr || seat == nullptr) {
     cleanup();
     return false;
   }
 
-  if (m_manager == manager && m_seat == seat && m_keyboard != nullptr) {
+  if (m_manager == manager && m_seat == seat && m_display == display && m_keyboard != nullptr) {
     return true;
   }
 
   cleanup();
   m_manager = manager;
   m_seat = seat;
+  m_display = display;
   return ensureKeyboard();
 }
 
@@ -68,6 +69,7 @@ void VirtualKeyboardService::cleanup() {
   }
   m_manager = nullptr;
   m_seat = nullptr;
+  m_display = nullptr;
   m_ctrlMask = 0;
   m_shiftMask = 0;
   m_keymapUploaded = false;
@@ -92,9 +94,8 @@ bool VirtualKeyboardService::sendPasteShortcut(VirtualPasteShortcut shortcut) {
     break;
   }
 
-  auto* display = wl_proxy_get_display(reinterpret_cast<wl_proxy*>(m_keyboard));
-  if (display != nullptr) {
-    (void)wl_display_flush(display);
+  if (m_display != nullptr) {
+    (void)wl_display_flush(m_display);
   }
   return true;
 }

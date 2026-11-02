@@ -88,7 +88,10 @@ polkit_gobject_dep  = dependency('polkit-gobject-1')
 # PipeWire/SPA headers use GCC extensions that trigger -Wpedantic/-Wconversion;
 # mark as system so the compiler suppresses those warnings.
 pipewire_dep        = dependency('libpipewire-0.3', include_type: 'system')
-wireplumber_dep     = dependency('wireplumber-0.5', include_type: 'system')
+wireplumber_dep     = dependency('wireplumber-0.5', required: false, include_type: 'system')
+if not wireplumber_dep.found()
+  wireplumber_dep = dependency('wireplumber-0.4', include_type: 'system')
+endif
 curl_dep            = dependency('libcurl')
 libqalculate_dep    = dependency('libqalculate')
 libxml2_dep         = dependency('libxml-2.0')
@@ -188,9 +191,6 @@ mcu_dep = declare_dependency(
 )
 
 # ── System: stb_image_resize2 and stb_image_write (header-only) ─────────────────────────────────
-if not cc.has_header('stb/stb_image_resize2.h')
-  error('stb/stb_image_resize2.h not found')
-endif
 if not cc.has_header('stb/stb_image_write.h')
   error('stb/stb_image_write.h not found')
 endif
@@ -1014,6 +1014,7 @@ endif
 _noctalia_inc = [
   include_directories('src'),
   include_directories('third_party/wuffs', is_system: true),
+  include_directories('third_party/stb', is_system: true),
   # '.' adds both the source root and the corresponding build-dir root, so
   # generated protocol headers (written to the build root) are found by #include.
   include_directories('.'),

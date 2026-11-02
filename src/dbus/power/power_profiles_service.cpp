@@ -32,7 +32,7 @@ namespace {
 
   constexpr Logger kLog("power");
 
-  const sdbus::ServiceName kPowerProfilesBusName{"org.freedesktop.UPower.PowerProfiles"};
+  const std::string kPowerProfilesBusName{"org.freedesktop.UPower.PowerProfiles"};
   const sdbus::ObjectPath kPowerProfilesObjectPath{"/org/freedesktop/UPower/PowerProfiles"};
   constexpr auto kPowerProfilesInterface = "org.freedesktop.UPower.PowerProfiles";
   constexpr auto kPropertiesInterface = "org.freedesktop.DBus.Properties";
@@ -94,9 +94,9 @@ namespace {
   bool isTimeoutError(const sdbus::Error& error) {
     const auto& name = error.getName();
     return (
-        name == sdbus::Error::Name{"org.freedesktop.DBus.Error.NoReply"}
-        || name == sdbus::Error::Name{"org.freedesktop.DBus.Error.Timeout"}
-        || name == sdbus::Error::Name{"org.freedesktop.DBus.Error.TimedOut"}
+        name == "org.freedesktop.DBus.Error.NoReply"
+        || name == "org.freedesktop.DBus.Error.Timeout"
+        || name == "org.freedesktop.DBus.Error.TimedOut"
     );
   }
 
@@ -191,12 +191,12 @@ void PowerProfilesService::refresh() {
     m_proxy->callMethodAsync("GetAll")
         .onInterface(kPropertiesInterface)
         .withArguments(std::string{kPowerProfilesInterface})
-        .uponReplyInvoke([this, lifetimeToken](std::optional<sdbus::Error> err, VariantMap properties) {
+        .uponReplyInvoke([this, lifetimeToken](const sdbus::Error* err, VariantMap properties) {
           if (lifetimeToken.expired()) {
             return;
           }
 
-          if (err.has_value()) {
+          if (err) {
             kLog.debug("power profiles refresh failed: {}", err->what());
             if (!m_hasStateSnapshot && isTimeoutError(*err)) {
               m_refreshQueued = true;
@@ -236,8 +236,8 @@ bool PowerProfilesService::setActiveProfile(std::string_view profile) {
     m_proxy->setPropertyAsync("ActiveProfile")
         .onInterface(kPowerProfilesInterface)
         .toValue(requested)
-        .uponReplyInvoke([lifetimeToken, requested](std::optional<sdbus::Error> err) {
-          if (lifetimeToken.expired() || !err.has_value()) {
+        .uponReplyInvoke([lifetimeToken, requested](const sdbus::Error* err) {
+          if (lifetimeToken.expired() || !err) {
             return;
           }
           // The optimistic update below already reconciles via refresh(); just surface the failure.

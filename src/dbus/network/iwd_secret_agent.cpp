@@ -8,7 +8,6 @@
 #include <sdbus-c++/IObject.h>
 #include <sdbus-c++/MethodResult.h>
 #include <sdbus-c++/Types.h>
-#include <sdbus-c++/VTableItems.h>
 #include <string>
 #include <utility>
 
@@ -21,7 +20,7 @@ namespace {
   const sdbus::ObjectPath kAgentObjectPath{"/net/connman/iwd/Agent"};
   constexpr auto kAgentInterface = "net.connman.iwd.Agent";
 
-  const sdbus::ServiceName kIwdBusName{"net.connman.iwd"};
+  const std::string kIwdBusName{"net.connman.iwd"};
   const sdbus::ObjectPath kAgentManagerObjectPath{"/net/connman/iwd"};
   constexpr auto kAgentManagerInterface = "net.connman.iwd.AgentManager";
 
@@ -39,7 +38,7 @@ struct IwdSecretAgent::Impl {
     if (pendingResult.has_value()) {
       kLog.debug("RequestPassphrase while another is pending -> Cancel");
       result.returnError(
-          sdbus::Error{sdbus::Error::Name{"net.connman.iwd.Agent.Error.Canceled"}, "another request is already pending"}
+          sdbus::Error{"net.connman.iwd.Agent.Error.Canceled", "another request is already pending"}
       );
       return;
     }
@@ -64,7 +63,7 @@ struct IwdSecretAgent::Impl {
       return;
     }
     constexpr auto kErrorName = "net.connman.iwd.Agent.Error.Canceled";
-    pendingResult->returnError(sdbus::Error{sdbus::Error::Name{kErrorName}, reason});
+    pendingResult->returnError(sdbus::Error{kErrorName, reason});
     pendingResult.reset();
   }
 
@@ -80,19 +79,17 @@ struct IwdSecretAgent::Impl {
 IwdSecretAgent::IwdSecretAgent(SystemBus& bus) : m_impl(std::make_unique<Impl>(bus)) {
   m_impl->object = sdbus::createObject(bus.connection(), kAgentObjectPath);
 
-  m_impl->object
-      ->addVTable(
-          sdbus::registerMethod("RequestPassphrase")
+  m_impl->object->registerMethod("RequestPassphrase")
               .withInputParamNames("network")
               .withOutputParamNames("passphrase")
               .implementedAs([this](sdbus::Result<std::string>&& result, const sdbus::ObjectPath& networkPath) {
                 m_impl->onRequestPassphrase(std::move(result), networkPath);
-              }),
-          sdbus::registerMethod("Cancel").withInputParamNames("reason").implementedAs(
-              [this](const std::string& reason) { m_impl->cancelPending(reason); }
-          )
-      )
-      .forInterface(kAgentInterface);
+              })
+      .onInterface(kAgentInterface);
+  m_impl->object->registerMethod("Cancel").withInputParamNames("reason").implementedAs(
+              [this](const std::string& reason) { m_impl->cancelPending(reason); })
+      .onInterface(kAgentInterface);
+  m_impl->object->finishRegistration();
 
   // Register with iwd's agent manager.
   try {

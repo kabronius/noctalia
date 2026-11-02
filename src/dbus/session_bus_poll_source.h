@@ -15,13 +15,13 @@ public:
     return t;
   }
 
-  void dispatch(const std::vector<pollfd>& /*fds*/, std::size_t /*startIdx*/) override { m_bus.processPendingEvents(); }
+  void dispatch(const std::vector<pollfd>& /*fds*/, std::size_t /*startIdx*/) override { m_bus.processPendingRequests(); }
 
 protected:
   void doAddPollFds(std::vector<pollfd>& fds) override {
     auto pd = m_bus.getPollData();
     fds.push_back({.fd = pd.fd, .events = pd.events, .revents = 0});
-    fds.push_back({.fd = pd.eventFd, .events = POLLIN, .revents = 0});
+    // sdbus-c++ 1.4 PollData has only fd (no eventFd).
   }
 
 private:

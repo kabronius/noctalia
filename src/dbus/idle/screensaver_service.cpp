@@ -13,8 +13,8 @@ namespace {
 
   constexpr Logger kLog("screensaver");
 
-  const sdbus::ServiceName kBusName{"org.freedesktop.ScreenSaver"};
-  const sdbus::ServiceName kLogindBusName{"org.freedesktop.login1"};
+  const std::string kBusName{"org.freedesktop.ScreenSaver"};
+  const std::string kLogindBusName{"org.freedesktop.login1"};
   const sdbus::ObjectPath kLogindObjectPath{"/org/freedesktop/login1"};
   constexpr auto kInterface = "org.freedesktop.ScreenSaver";
   constexpr auto kLogindManagerInterface = "org.freedesktop.login1.Manager";
@@ -71,7 +71,7 @@ sdbus::IConnection::PollData ScreenSaverService::getPollData() const {
   return m_connection->getEventLoopPollData();
 }
 
-void ScreenSaverService::processPendingEvents() {
+void ScreenSaverService::processPendingRequests() {
   if (m_connection == nullptr) {
     m_hasPendingEvents = false;
     return;
@@ -80,7 +80,7 @@ void ScreenSaverService::processPendingEvents() {
   m_hasPendingEvents = false;
   const auto batchStart = std::chrono::steady_clock::now();
   for (int processed = 0; processed < kMaxEventsPerDispatch; ++processed) {
-    if (!m_connection->processPendingEvent()) {
+    if (!m_connection->processPendingRequest()) {
       return;
     }
     if (processed + 1 >= kMaxEventsPerDispatch || std::chrono::steady_clock::now() - batchStart >= kMaxDispatchBudget) {
@@ -96,7 +96,7 @@ void ScreenSaverService::registerScreenSaver() {
   }
 
   m_dbusProxy = sdbus::createProxy(
-      *m_connection, sdbus::ServiceName{"org.freedesktop.DBus"}, sdbus::ObjectPath{"/org/freedesktop/DBus"}
+      *m_connection, "org.freedesktop.DBus", sdbus::ObjectPath{"/org/freedesktop/DBus"}
   );
   m_dbusProxy->uponSignal("NameOwnerChanged")
       .onInterface("org.freedesktop.DBus")
@@ -113,23 +113,24 @@ void ScreenSaverService::registerScreenSaver() {
   for (const auto& path : kObjectPaths) {
     try {
       auto object = sdbus::createObject(*m_connection, path);
-      object
-          ->addVTable(
-              sdbus::registerMethod("Inhibit")
+      object->registerMethod("Inhibit")
                   .withInputParamNames("application_name", "reason_for_inhibit")
                   .withOutputParamNames("cookie")
                   .implementedAs([this, objectPtr = object.get()](std::string app, std::string reason) {
-                    return onInhibit(
-                        std::move(app), std::move(reason), objectPtr->getCurrentlyProcessedMessage().getSender()
-                    );
-                  }),
-              sdbus::registerMethod("UnInhibit")
+                    const auto* msg = objectPtr->getCurrentlyProcessedMessage();
+                    const std::string sender = msg != nullptr ? msg->getSender() : std::string{};
+                    return onInhibit(std::move(app), std::move(reason), sender.c_str());
+                  })
+          .onInterface(kInterface);
+      object->registerMethod("UnInhibit")
                   .withInputParamNames("cookie")
                   .implementedAs([this, objectPtr = object.get()](std::uint32_t cookie) {
-                    onUninhibit(cookie, objectPtr->getCurrentlyProcessedMessage().getSender());
+                    const auto* msg = objectPtr->getCurrentlyProcessedMessage();
+                    const std::string sender = msg != nullptr ? msg->getSender() : std::string{};
+                    onUninhibit(cookie, sender.c_str());
                   })
-          )
-          .forInterface(kInterface);
+          .onInterface(kInterface);
+      object->finishRegistration();
       m_objects.push_back(std::move(object));
     } catch (const std::exception& e) {
       kLog.warn("failed to register ScreenSaver at {}: {}", std::string{path}, e.what());
@@ -137,7 +138,7 @@ void ScreenSaverService::registerScreenSaver() {
   }
 
   if (m_objects.empty()) {
-    throw sdbus::Error(sdbus::Error::Name{kFileExistsError}, "no ScreenSaver object paths registered");
+    throw sdbus::Error(kFileExistsError, "no ScreenSaver object paths registered");
   }
 
   m_active = true;

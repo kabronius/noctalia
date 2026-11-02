@@ -17,14 +17,15 @@
 #include <optional>
 #include <string_view>
 #include <unistd.h>
+#include <sdbus-c++/Message.h>
 
 namespace {
 
-  const sdbus::ServiceName kWatcherBusName{"org.kde.StatusNotifierWatcher"};
+  const std::string kWatcherBusName{"org.kde.StatusNotifierWatcher"};
   const sdbus::ObjectPath kWatcherObjectPath{"/StatusNotifierWatcher"};
   constexpr auto kWatcherInterface = "org.kde.StatusNotifierWatcher";
 
-  const sdbus::ServiceName kDbusName{"org.freedesktop.DBus"};
+  const std::string kDbusName{"org.freedesktop.DBus"};
   const sdbus::ObjectPath kDbusPath{"/org/freedesktop/DBus"};
   constexpr auto kDbusInterface = "org.freedesktop.DBus";
   constexpr auto kItemInterface = "org.kde.StatusNotifierItem";
@@ -448,33 +449,20 @@ namespace {
 
   std::vector<IconPixmapTuple> iconPixmapsFromVariant(const sdbus::Variant& value) {
     try {
-      return value.get<std::vector<IconPixmapTuple>>();
-    } catch (const sdbus::Error&) {
-    }
-
-    try {
       const auto structs = value.get<std::vector<IconPixmapStruct>>();
       std::vector<IconPixmapTuple> out;
       out.reserve(structs.size());
-      for (const auto& entry : structs) {
-        out.emplace_back(std::get<0>(entry), std::get<1>(entry), std::get<2>(entry));
+      for (const auto& s : structs) {
+        out.emplace_back(std::get<0>(s), std::get<1>(s), std::get<2>(s));
       }
       return out;
     } catch (const sdbus::Error&) {
     }
-
-    try {
-      const auto single = value.get<IconPixmapTuple>();
-      return {single};
-    } catch (const sdbus::Error&) {
-    }
-
     try {
       const auto single = value.get<IconPixmapStruct>();
       return {IconPixmapTuple{std::get<0>(single), std::get<1>(single), std::get<2>(single)}};
     } catch (const sdbus::Error&) {
     }
-
     return {};
   }
 
@@ -500,7 +488,7 @@ namespace {
     const auto* value = findProperty(properties, "ToolTip");
     if (value != nullptr) {
       try {
-        const auto text = value->get<StatusNotifierTextTuple>();
+        const auto text = value->get<StatusNotifierTextStruct>();
         return {std::get<2>(text), std::get<3>(text)};
       } catch (const sdbus::Error&) {
       }
@@ -623,40 +611,55 @@ void TrayService::startAsWatcherOwner() {
 
   m_watcherObject = sdbus::createObject(m_bus.connection(), kWatcherObjectPath);
 
-  auto regItem = sdbus::registerMethod("RegisterStatusNotifierItem").withInputParamNames("service");
-  regItem.inputSignature = "s";
-  regItem.callbackHandler = [this](sdbus::MethodCall msg) {
-    std::string serviceOrPath;
-    msg >> serviceOrPath;
-    const char* sender = msg.getSender();
-    msg.createReply().send();
-    DeferredCall::callLater([this, serviceOrPath = std::move(serviceOrPath),
-                             senderBusName = std::string(sender != nullptr ? sender : "")]() {
-      onRegisterStatusNotifierItem(serviceOrPath, senderBusName);
-    });
-  };
+  m_watcherObject->registerMethod(
+      kWatcherInterface,
+      "RegisterStatusNotifierItem",
+      "s",
+      std::vector<std::string>{"service"},
+      "",
+      std::vector<std::string>{},
+      [this](sdbus::MethodCall msg) {
+        std::string serviceOrPath;
+        msg >> serviceOrPath;
+        const std::string senderBusName = msg.getSender();
+        msg.createReply().send();
+        DeferredCall::callLater([this, serviceOrPath = std::move(serviceOrPath), senderBusName]() {
+          onRegisterStatusNotifierItem(serviceOrPath, senderBusName);
+        });
+      }
+  );
 
-  m_watcherObject
-      ->addVTable(
-          std::move(regItem),
+  m_watcherObject->registerMethod("RegisterStatusNotifierHost")
+      .onInterface(kWatcherInterface)
+      .withInputParamNames("service")
+      .implementedAs([this](const std::string& host) { onRegisterStatusNotifierHost(host); });
 
-          sdbus::registerMethod("RegisterStatusNotifierHost")
-              .withInputParamNames("service")
-              .implementedAs([this](const std::string& host) { onRegisterStatusNotifierHost(host); }),
+  m_watcherObject->registerMethod("GetRegisteredItems")
+      .onInterface(kWatcherInterface)
+      .withOutputParamNames("items")
+      .implementedAs([this]() { return registeredItems(); });
 
-          sdbus::registerMethod("GetRegisteredItems").withOutputParamNames("items").implementedAs([this]() {
-            return registeredItems();
-          }),
+  m_watcherObject->registerProperty("RegisteredStatusNotifierItems")
+      .onInterface(kWatcherInterface)
+      .withGetter([this]() { return registeredItems(); });
+  m_watcherObject->registerProperty("IsStatusNotifierHostRegistered")
+      .onInterface(kWatcherInterface)
+      .withGetter([this]() { return m_hostRegistered; });
+  m_watcherObject->registerProperty("ProtocolVersion")
+      .onInterface(kWatcherInterface)
+      .withGetter([]() { return static_cast<std::int32_t>(0); });
 
-          sdbus::registerProperty("RegisteredStatusNotifierItems").withGetter([this]() { return registeredItems(); }),
-          sdbus::registerProperty("IsStatusNotifierHostRegistered").withGetter([this]() { return m_hostRegistered; }),
-          sdbus::registerProperty("ProtocolVersion").withGetter([]() { return static_cast<std::int32_t>(0); }),
+  m_watcherObject->registerSignal("StatusNotifierItemRegistered")
+      .onInterface(kWatcherInterface)
+      .withParameters<std::string>("service");
+  m_watcherObject->registerSignal("StatusNotifierItemUnregistered")
+      .onInterface(kWatcherInterface)
+      .withParameters<std::string>("service");
+  m_watcherObject->registerSignal("StatusNotifierHostRegistered")
+      .onInterface(kWatcherInterface)
+      .withParameters<>();
 
-          sdbus::registerSignal("StatusNotifierItemRegistered").withParameters<std::string>("service"),
-          sdbus::registerSignal("StatusNotifierItemUnregistered").withParameters<std::string>("service"),
-          sdbus::registerSignal("StatusNotifierHostRegistered").withParameters<>()
-      )
-      .forInterface(kWatcherInterface);
+  m_watcherObject->finishRegistration();
 
   try {
     m_bus.connection().requestName(kWatcherBusName);
@@ -678,7 +681,7 @@ void TrayService::startAsWatcherClient() {
 
   m_hostBusName = "org.kde.StatusNotifierHost-" + std::to_string(getpid());
   try {
-    m_bus.connection().requestName(sdbus::ServiceName{m_hostBusName});
+    m_bus.connection().requestName(m_hostBusName);
   } catch (const sdbus::Error& e) {
     kLog.debug("tray host bus name request failed: {}", e.what());
     m_hostBusName.clear();
@@ -766,7 +769,7 @@ void TrayService::notifyWatcherItemRegistered(const std::string& itemId) {
   }
   m_watcherObject->emitSignal("StatusNotifierItemRegistered").onInterface(kWatcherInterface).withArguments(itemId);
   m_watcherObject->emitPropertiesChangedSignal(
-      kWatcherInterface, std::vector<sdbus::PropertyName>{sdbus::PropertyName{"RegisteredStatusNotifierItems"}}
+      kWatcherInterface, std::vector<std::string>{"RegisteredStatusNotifierItems"}
   );
 }
 
@@ -776,7 +779,7 @@ void TrayService::notifyWatcherItemUnregistered(const std::string& itemId) {
   }
   m_watcherObject->emitSignal("StatusNotifierItemUnregistered").onInterface(kWatcherInterface).withArguments(itemId);
   m_watcherObject->emitPropertiesChangedSignal(
-      kWatcherInterface, std::vector<sdbus::PropertyName>{sdbus::PropertyName{"RegisteredStatusNotifierItems"}}
+      kWatcherInterface, std::vector<std::string>{"RegisteredStatusNotifierItems"}
   );
 }
 
@@ -900,7 +903,7 @@ void TrayService::fetchMenuProperties(
         .withTimeout(std::chrono::milliseconds(1000))
         .withArguments(entryIds, requestedMenuProperties())
         .uponReplyInvoke([this, itemId, entryIds, callback = std::move(callback)](
-                             std::optional<sdbus::Error> error, std::vector<DbusMenuItemProperties> properties
+                             const sdbus::Error* error, std::vector<DbusMenuItemProperties> properties
                          ) {
           auto replyCacheIt = m_menuCache.find(itemId);
           if (replyCacheIt == m_menuCache.end() || replyCacheIt->second.proxy == nullptr) {
@@ -909,7 +912,7 @@ void TrayService::fetchMenuProperties(
           }
           auto& replyCache = replyCacheIt->second;
 
-          if (error.has_value()) {
+          if (error) {
             kLog.debug("GetGroupProperties failed id={} entries={} err={}", itemId, entryIds.size(), error->what());
             callback(false);
             return;
@@ -980,8 +983,8 @@ void TrayService::requestMenuSubtree(const std::string& itemId, std::int32_t par
             .withTimeout(std::chrono::milliseconds(500))
             .withArguments(parentId)
             .uponReplyInvoke([this, itemId, parentId,
-                              generation](std::optional<sdbus::Error> error, bool /*needsUpdate*/) {
-              if (error.has_value()) {
+                              generation](const sdbus::Error* error, bool /*needsUpdate*/) {
+              if (error) {
                 kLog.debug("root AboutToShow failed id={} parent={} err={}", itemId, parentId, error->what());
               } else {
                 requestMenuLayoutAfterAboutToShow(itemId, parentId, generation);
@@ -999,8 +1002,8 @@ void TrayService::requestMenuSubtree(const std::string& itemId, std::int32_t par
         .onInterface(kMenuInterface)
         .withTimeout(std::chrono::milliseconds(500))
         .withArguments(parentId)
-        .uponReplyInvoke([this, itemId, parentId, generation](std::optional<sdbus::Error> error, bool /*needsUpdate*/) {
-          if (error.has_value()) {
+        .uponReplyInvoke([this, itemId, parentId, generation](const sdbus::Error* error, bool /*needsUpdate*/) {
+          if (error) {
             kLog.debug("AboutToShow failed id={} parent={} err={}", itemId, parentId, error->what());
           }
           requestMenuLayoutAfterAboutToShow(itemId, parentId, generation);
@@ -1029,7 +1032,7 @@ void TrayService::requestMenuLayoutAfterAboutToShow(
         .withTimeout(std::chrono::milliseconds(2000))
         .withArguments(parentId, static_cast<std::int32_t>(-1), requestedMenuProperties())
         .uponReplyInvoke([this, itemId, parentId, generation](
-                             std::optional<sdbus::Error> error, std::uint32_t revision, DbusMenuLayout layout
+                             const sdbus::Error* error, std::uint32_t revision, DbusMenuLayout layout
                          ) {
           auto replyCacheIt = m_menuCache.find(itemId);
           if (replyCacheIt == m_menuCache.end() || replyCacheIt->second.proxy == nullptr) {
@@ -1043,7 +1046,7 @@ void TrayService::requestMenuLayoutAfterAboutToShow(
           const auto before = entriesForParent(replyCache.entriesById, replyCache.childrenByParent, parentId);
           replyCache.loadingParents.erase(parentId);
 
-          if (error.has_value()) {
+          if (error) {
             std::uint8_t& streak = replyCache.failureStreak[parentId];
             streak = static_cast<std::uint8_t>(std::min<int>(4, static_cast<int>(streak) + 1));
             const int exponent = std::min<int>(4, static_cast<int>(streak));
@@ -1196,7 +1199,7 @@ void TrayService::ensureMenuCache(const std::string& itemId, const std::string& 
   }
 
   try {
-    auto proxy = sdbus::createProxy(m_bus.connection(), sdbus::ServiceName{busName}, sdbus::ObjectPath{menuPath});
+    auto proxy = sdbus::createProxy(m_bus.connection(), busName, sdbus::ObjectPath{menuPath});
 
     // LayoutUpdated(rev, parent): server is telling us the subtree rooted at
     // `parent` changed. Invalidate incrementally to avoid feedback loops where
@@ -1328,8 +1331,8 @@ void TrayService::sendMenuEvent(const std::string& itemId, std::int32_t entryId,
         .onInterface(kMenuInterface)
         .withTimeout(std::chrono::milliseconds(500))
         .withArguments(entryId, eventName, sdbus::Variant{std::int32_t{0}}, timestamp)
-        .uponReplyInvoke([itemId, entryId, eventName](std::optional<sdbus::Error> error) {
-          if (error.has_value()) {
+        .uponReplyInvoke([itemId, entryId, eventName](const sdbus::Error* error) {
+          if (error) {
             kLog.debug(
                 "dbusmenu Event failed id={} entryId={} event={} err={}", itemId, entryId, eventName, error->what()
             );
@@ -1379,8 +1382,8 @@ bool TrayService::activateMenuEntry(const std::string& itemId, std::int32_t entr
         .onInterface(kMenuInterface)
         .withTimeout(std::chrono::milliseconds(1000))
         .withArguments(entryId, std::string("clicked"), sdbus::Variant{std::int32_t{0}}, timestamp)
-        .uponReplyInvoke([itemId, entryId](std::optional<sdbus::Error> error) {
-          if (error.has_value()) {
+        .uponReplyInvoke([itemId, entryId](const sdbus::Error* error) {
+          if (error) {
             kLog.debug("dbusmenu clicked failed id={} entryId={} err={}", itemId, entryId, error->what());
           }
         });
@@ -1416,8 +1419,8 @@ bool TrayService::activateItem(const std::string& itemId, std::int32_t x, std::i
         .onInterface(kItemInterface)
         .withTimeout(std::chrono::milliseconds(1000))
         .withArguments(x, y)
-        .uponReplyInvoke([itemId](std::optional<sdbus::Error> error) {
-          if (error.has_value()) {
+        .uponReplyInvoke([itemId](const sdbus::Error* error) {
+          if (error) {
             kLog.debug("activate failed id={} err={}", itemId, error->what());
           }
         });
@@ -1442,8 +1445,8 @@ bool TrayService::openContextMenu(const std::string& itemId, std::int32_t x, std
         .onInterface(kItemInterface)
         .withTimeout(std::chrono::milliseconds(1000))
         .withArguments(x, y)
-        .uponReplyInvoke([itemId](std::optional<sdbus::Error> error) {
-          if (error.has_value()) {
+        .uponReplyInvoke([itemId](const sdbus::Error* error) {
+          if (error) {
             kLog.debug("context menu failed id={} err={}", itemId, error->what());
           }
         });
@@ -1494,8 +1497,8 @@ void TrayService::onRegisterStatusNotifierItem(const std::string& serviceOrPath,
           .onInterface(kDbusInterface)
           .withTimeout(std::chrono::milliseconds(200))
           .withArguments(busName)
-          .uponReplyInvoke([this, busName](std::optional<sdbus::Error> error, bool hasOwner) {
-            if (error.has_value()) {
+          .uponReplyInvoke([this, busName](const sdbus::Error* error, bool hasOwner) {
+            if (error) {
               kLog.debug("register item ignored: NameHasOwner failed for bus='{}' err={}", busName, error->what());
               return;
             }
@@ -1533,7 +1536,7 @@ void TrayService::onRegisterStatusNotifierHost(const std::string& host) {
   if (m_watcherObject != nullptr) {
     m_watcherObject->emitSignal("StatusNotifierHostRegistered").onInterface(kWatcherInterface);
     m_watcherObject->emitPropertiesChangedSignal(
-        kWatcherInterface, std::vector<sdbus::PropertyName>{sdbus::PropertyName{"IsStatusNotifierHostRegistered"}}
+        kWatcherInterface, std::vector<std::string>{"IsStatusNotifierHostRegistered"}
     );
   }
   emitChanged();
@@ -1545,8 +1548,8 @@ void TrayService::discoverExistingItems() {
     m_dbusProxy->callMethodAsync("ListNames")
         .onInterface(kDbusInterface)
         .withTimeout(std::chrono::milliseconds(200))
-        .uponReplyInvoke([this](std::optional<sdbus::Error> error, std::vector<std::string> names) {
-          if (error.has_value()) {
+        .uponReplyInvoke([this](const sdbus::Error* error, std::vector<std::string> names) {
+          if (error) {
             kLog.debug("tray discover failed: {}", error->what());
             return;
           }
@@ -1600,15 +1603,15 @@ void TrayService::tryRegisterItemForBusName(const std::string& busName, std::fun
     const auto candidatePathString = std::string(candidatePath);
     try {
       auto probe = std::shared_ptr<sdbus::IProxy>(
-          sdbus::createProxy(m_bus.connection(), sdbus::ServiceName{busName}, sdbus::ObjectPath{candidatePathString})
+          sdbus::createProxy(m_bus.connection(), busName, sdbus::ObjectPath{candidatePathString})
       );
       probe->callMethodAsync("GetAll")
           .onInterface("org.freedesktop.DBus.Properties")
           .withTimeout(kItemPropertyTimeout)
           .withArguments(kItemInterface)
           .uponReplyInvoke([this, busName, candidatePathString, pending, registeredAny, finish,
-                            probe](std::optional<sdbus::Error> error, std::map<std::string, sdbus::Variant>) {
-            if (!error.has_value()) {
+                            probe](const sdbus::Error* error, std::map<std::string, sdbus::Variant>) {
+            if (!error) {
               registerOrRefreshItem(busName, candidatePathString);
               *registeredAny = true;
             } else {
@@ -1691,8 +1694,8 @@ void TrayService::requestProcessNameForItem(const std::string& itemId, const std
         .onInterface(kDbusInterface)
         .withTimeout(std::chrono::milliseconds(200))
         .withArguments(busName)
-        .uponReplyInvoke([this, itemId, busName](std::optional<sdbus::Error> error, std::uint32_t pid) {
-          if (error.has_value()) {
+        .uponReplyInvoke([this, itemId, busName](const sdbus::Error* error, std::uint32_t pid) {
+          if (error) {
             return;
           }
 
@@ -1806,7 +1809,7 @@ void TrayService::registerOrRefreshItem(const std::string& busName, const std::s
 
     if (looks_like_dbus_name(busName)) {
       auto [proxyIt, _] = m_itemProxies.emplace(
-          itemId, sdbus::createProxy(m_bus.connection(), sdbus::ServiceName{busName}, sdbus::ObjectPath{objectPath})
+          itemId, sdbus::createProxy(m_bus.connection(), busName, sdbus::ObjectPath{objectPath})
       );
       attachItemProxySignals(itemId, *proxyIt->second);
     }
@@ -1868,8 +1871,8 @@ void TrayService::resolvePathOnlyItemProxy(const std::string& itemId) {
         .onInterface(kDbusInterface)
         .withTimeout(std::chrono::milliseconds(200))
         .uponReplyInvoke([this, itemId, objectPath,
-                          hints](std::optional<sdbus::Error> error, std::vector<std::string> names) {
-          if (error.has_value()) {
+                          hints](const sdbus::Error* error, std::vector<std::string> names) {
+          if (error) {
             kLog.debug("lazy path-only resolve failed to list dbus names path={} err={}", objectPath, error->what());
             m_pathOnlyResolutionsInFlight.erase(itemId);
             return;
@@ -1932,16 +1935,16 @@ void TrayService::resolvePathOnlyItemProxy(const std::string& itemId) {
             // so this is safe in practice, but if that ever changes, a guard is needed to avoid use-after-free.
             try {
               auto probe = std::shared_ptr<sdbus::IProxy>(
-                  sdbus::createProxy(m_bus.connection(), sdbus::ServiceName{candidate}, sdbus::ObjectPath{objectPath})
+                  sdbus::createProxy(m_bus.connection(), candidate, sdbus::ObjectPath{objectPath})
               );
               probe->callMethodAsync("GetAll")
                   .onInterface("org.freedesktop.DBus.Properties")
                   .withTimeout(kProbeTimeout)
                   .withArguments(kItemInterface)
                   .uponReplyInvoke([this, itemId, candidate, objectPath, probeNext, probe](
-                                       std::optional<sdbus::Error> probeError, std::map<std::string, sdbus::Variant>
+                                       const sdbus::Error* probeError, std::map<std::string, sdbus::Variant>
                                    ) {
-                    if (probeError.has_value()) {
+                    if (probeError) {
                       invokeSharedCallback(probeNext);
                       return;
                     }
@@ -1957,12 +1960,12 @@ void TrayService::resolvePathOnlyItemProxy(const std::string& itemId) {
                     auto [proxyIt, inserted] = m_itemProxies.emplace(
                         itemId,
                         sdbus::createProxy(
-                            m_bus.connection(), sdbus::ServiceName{candidate}, sdbus::ObjectPath{objectPath}
+                            m_bus.connection(), candidate, sdbus::ObjectPath{objectPath}
                         )
                     );
                     if (!inserted) {
                       proxyIt->second = sdbus::createProxy(
-                          m_bus.connection(), sdbus::ServiceName{candidate}, sdbus::ObjectPath{objectPath}
+                          m_bus.connection(), candidate, sdbus::ObjectPath{objectPath}
                       );
                     }
 
@@ -2020,13 +2023,13 @@ void TrayService::refreshItemMetadata(const std::string& itemId) {
         .withTimeout(kItemPropertyTimeout)
         .withArguments(kItemInterface)
         .uponReplyInvoke([this,
-                          itemId](std::optional<sdbus::Error> error, std::map<std::string, sdbus::Variant> properties) {
+                          itemId](const sdbus::Error* error, std::map<std::string, sdbus::Variant> properties) {
           auto currentItemIt = m_items.find(itemId);
           if (currentItemIt == m_items.end()) {
             return;
           }
 
-          if (error.has_value()) {
+          if (error) {
             kLog.debug("metadata GetAll failed id={} err={}", itemId, error->what());
             ensureMenuCache(itemId, currentItemIt->second.busName, currentItemIt->second.menuObjectPath);
             emitChanged();

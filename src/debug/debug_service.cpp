@@ -8,7 +8,7 @@ namespace {
 
   constexpr Logger kLog("debug");
 
-  const sdbus::ServiceName kDebugBusName{"dev.noctalia.Debug"};
+  const std::string kDebugBusName{"dev.noctalia.Debug"};
   const sdbus::ObjectPath kDebugObjectPath{"/dev/noctalia/Debug"};
   constexpr auto kDebugInterface = "dev.noctalia.Debug";
 
@@ -25,26 +25,24 @@ DebugService::DebugService(SessionBus& bus, NotificationManager& notifications) 
   bus.connection().requestName(kDebugBusName);
   m_object = sdbus::createObject(bus.connection(), kDebugObjectPath);
 
-  m_object
-      ->addVTable(
-          sdbus::registerMethod("EmitInternalNotification")
+  m_object->registerMethod("EmitInternalNotification")
               .withInputParamNames("app_name", "summary", "body", "timeout", "urgency")
               .withOutputParamNames("id")
               .implementedAs([this](
                                  const std::string& app_name, const std::string& summary, const std::string& body,
                                  int32_t timeout, uint8_t urgency
-                             ) { return onEmitInternalNotification(app_name, summary, body, urgency, timeout); }),
-
-          sdbus::registerMethod("SetVerboseLogs")
+                             ) { return onEmitInternalNotification(app_name, summary, body, urgency, timeout); })
+      .onInterface(kDebugInterface);
+  m_object->registerMethod("SetVerboseLogs")
               .withInputParamNames("enabled")
               .withOutputParamNames("success")
-              .implementedAs([this](bool enabled) { return onSetVerboseLogs(enabled); }),
-
-          sdbus::registerMethod("GetVerboseLogs").withOutputParamNames("enabled").implementedAs([this]() {
+              .implementedAs([this](bool enabled) { return onSetVerboseLogs(enabled); })
+      .onInterface(kDebugInterface);
+  m_object->registerMethod("GetVerboseLogs").withOutputParamNames("enabled").implementedAs([this]() {
             return onGetVerboseLogs();
           })
-      )
-      .forInterface(kDebugInterface);
+      .onInterface(kDebugInterface);
+  m_object->finishRegistration();
 }
 
 uint32_t DebugService::onEmitInternalNotification(

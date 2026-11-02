@@ -145,8 +145,8 @@ private:
   [[nodiscard]] std::optional<std::string> chooseActivePlayer() const;
   bool cycleActivePlayer(int direction);
   [[nodiscard]] bool isBlacklisted(const MprisPlayerInfo& player) const;
-  std::function<void(std::optional<sdbus::Error>)> makeAsyncReplyHandler(std::string op, std::string busName);
-  std::function<void(std::optional<sdbus::Error>)>
+  std::function<void(const sdbus::Error*)> makeAsyncReplyHandler(std::string op, std::string busName);
+  std::function<void(const sdbus::Error*)>
   makeAsyncReplyHandler(std::string op, std::string busName, std::string_view method);
   [[nodiscard]] bool callPlayerMethod(const std::string& busName, const char* methodName);
   [[nodiscard]] bool canInvoke(const MprisPlayerInfo& player, const char* methodName) const;

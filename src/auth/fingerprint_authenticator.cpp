@@ -17,13 +17,13 @@
 namespace {
   constexpr Logger kLog("fingerprint");
 
-  const sdbus::ServiceName kFprintBusName{"net.reactivated.Fprint"};
+  const std::string kFprintBusName{"net.reactivated.Fprint"};
   const sdbus::ObjectPath kManagerPath{"/net/reactivated/Fprint/Manager"};
   constexpr auto kManagerInterface = "net.reactivated.Fprint.Manager";
   constexpr auto kDeviceInterface = "net.reactivated.Fprint.Device";
   constexpr auto kPropertiesInterface = "org.freedesktop.DBus.Properties";
 
-  const sdbus::ServiceName kLoginBusName{"org.freedesktop.login1"};
+  const std::string kLoginBusName{"org.freedesktop.login1"};
   const sdbus::ObjectPath kLoginPath{"/org/freedesktop/login1"};
   constexpr auto kLoginManagerInterface = "org.freedesktop.login1.Manager";
 
@@ -60,7 +60,7 @@ namespace {
   bool isRecoverableVerifyStartError(const sdbus::Error& error) {
     // Suspend/resume can drop the claim while the proxy survives; only that case is worth
     // recreating+reclaiming. Other VerifyStart failures are permanent for this lock attempt.
-    return error.getName() == sdbus::Error::Name{"net.reactivated.Fprint.Error.ClaimDevice"};
+    return error.getName() == "net.reactivated.Fprint.Error.ClaimDevice";
   }
 } // namespace
 
@@ -179,9 +179,9 @@ void FingerprintAuthenticator::claimDevice() {
   m_device->callMethodAsync("Claim")
       .onInterface(kDeviceInterface)
       .withArguments(std::string{})
-      .uponReplyInvoke([this](std::optional<sdbus::Error> e) {
+      .uponReplyInvoke([this](const sdbus::Error* e) {
         m_claiming = false;
-        if (e.has_value()) {
+        if (e) {
           kLog.info("could not claim fingerprint device: {}", e->what());
           m_verifying = false;
           return;
@@ -216,8 +216,8 @@ void FingerprintAuthenticator::startVerify(bool isRetry) {
   m_device->callMethodAsync("VerifyStart")
       .onInterface(kDeviceInterface)
       .withArguments(std::string{"any"})
-      .uponReplyInvoke([this, isRetry](std::optional<sdbus::Error> e) {
-        if (e.has_value()) {
+      .uponReplyInvoke([this, isRetry](const sdbus::Error* e) {
+        if (e) {
           kLog.info("could not start fingerprint verification: {}", e->what());
           m_verifying = false;
           // A claim dropped across suspend/resume makes VerifyStart fail with ClaimDevice; drop the

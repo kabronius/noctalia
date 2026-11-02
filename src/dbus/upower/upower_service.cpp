@@ -19,7 +19,7 @@
 
 namespace {
 
-  const sdbus::ServiceName kUpowerBusName{"org.freedesktop.UPower"};
+  const std::string kUpowerBusName{"org.freedesktop.UPower"};
   const sdbus::ObjectPath kUpowerObjectPath{"/org/freedesktop/UPower"};
   constexpr auto kUpowerInterface = "org.freedesktop.UPower";
   constexpr auto kDeviceInterface = "org.freedesktop.UPower.Device";
@@ -92,7 +92,7 @@ namespace {
   template <typename T>
   T getPropertyOr(sdbus::IProxy& proxy, std::string_view iface, std::string_view propertyName, T fallback) {
     try {
-      const sdbus::Variant value = proxy.getProperty(propertyName).onInterface(iface);
+      const sdbus::Variant value = proxy.getProperty(std::string(propertyName)).onInterface(std::string(iface));
       return value.get<T>();
     } catch (const sdbus::Error&) {
       return fallback;
@@ -102,7 +102,7 @@ namespace {
   template <typename T>
   std::optional<T> getOptionalProperty(sdbus::IProxy& proxy, std::string_view iface, std::string_view propertyName) {
     try {
-      const sdbus::Variant value = proxy.getProperty(propertyName).onInterface(iface);
+      const sdbus::Variant value = proxy.getProperty(std::string(propertyName)).onInterface(std::string(iface));
       return value.get<T>();
     } catch (const sdbus::Error&) {
       return std::nullopt;
@@ -170,9 +170,9 @@ namespace {
 
   bool isAuthorizationError(const sdbus::Error& error) {
     const auto& name = error.getName();
-    if (name == sdbus::Error::Name{"org.freedesktop.DBus.Error.AccessDenied"}
-        || name == sdbus::Error::Name{"org.freedesktop.PolicyKit1.Error.NotAuthorized"}
-        || name == sdbus::Error::Name{"org.freedesktop.UPower.Device.PermissionDenied"}) {
+    if (name == std::string{"org.freedesktop.DBus.Error.AccessDenied"}
+        || name == std::string{"org.freedesktop.PolicyKit1.Error.NotAuthorized"}
+        || name == std::string{"org.freedesktop.UPower.Device.PermissionDenied"}) {
       return true;
     }
 
@@ -589,7 +589,7 @@ bool UPowerService::enableChargeThreshold(std::string_view devicePath, bool enab
     proxy->callMethodAsync("EnableChargeThreshold")
         .onInterface(kDeviceInterface)
         .withArguments(enabled)
-        .uponReplyInvoke([this, lifetimeToken, path, requestId, keepAlive = proxy](std::optional<sdbus::Error> error) {
+        .uponReplyInvoke([this, lifetimeToken, path, requestId, keepAlive = proxy](const sdbus::Error* error) {
           (void)keepAlive;
           if (lifetimeToken.expired()) {
             return;
@@ -612,11 +612,11 @@ bool UPowerService::enableChargeThreshold(std::string_view devicePath, bool enab
             refreshed->chargeThresholdRequestId.reset();
             refreshed->info.chargeLimit.requestPending = false;
             refreshed->info.chargeLimit.requestedEnabled.reset();
-            refreshed->info.chargeLimit.operationError = !error.has_value()
+            refreshed->info.chargeLimit.operationError = error == nullptr
                 ? ChargeLimitOperationError::None
                 : (isAuthorizationError(*error) ? ChargeLimitOperationError::PermissionDenied
                                                 : ChargeLimitOperationError::Failed);
-            if (error.has_value()) {
+            if (error != nullptr) {
               kLog.warn("charge threshold change failed device={} err={}", path, error->what());
             }
             changes.chargeLimitChanged = true;

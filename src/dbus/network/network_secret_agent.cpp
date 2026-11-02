@@ -10,7 +10,6 @@
 #include <sdbus-c++/IObject.h>
 #include <sdbus-c++/MethodResult.h>
 #include <sdbus-c++/Types.h>
-#include <sdbus-c++/VTableItems.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,7 +26,7 @@ namespace {
   constexpr auto kAgentInterface = "org.freedesktop.NetworkManager.SecretAgent";
   constexpr auto kAgentIdentifier = "org.noctalia.SecretAgent";
 
-  const sdbus::ServiceName kNmBusName{"org.freedesktop.NetworkManager"};
+  const std::string kNmBusName{"org.freedesktop.NetworkManager"};
   const sdbus::ObjectPath kAgentManagerObjectPath{"/org/freedesktop/NetworkManager/AgentManager"};
   constexpr auto kAgentManagerInterface = "org.freedesktop.NetworkManager.AgentManager";
 
@@ -73,7 +72,7 @@ struct NetworkSecretAgent::Impl {
       kLog.debug("GetSecrets without ALLOW_INTERACTION -> NoSecrets");
       result.returnError(
           sdbus::Error{
-              sdbus::Error::Name{"org.freedesktop.NetworkManager.SecretManager.NoSecrets"},
+              "org.freedesktop.NetworkManager.SecretManager.NoSecrets",
               "no interactive prompt permitted"
           }
       );
@@ -83,7 +82,7 @@ struct NetworkSecretAgent::Impl {
       kLog.debug("GetSecrets for unsupported setting \"{}\" -> NoSecrets", settingName);
       result.returnError(
           sdbus::Error{
-              sdbus::Error::Name{"org.freedesktop.NetworkManager.SecretManager.NoSecrets"}, "unsupported setting"
+              "org.freedesktop.NetworkManager.SecretManager.NoSecrets", "unsupported setting"
           }
       );
       return;
@@ -92,7 +91,7 @@ struct NetworkSecretAgent::Impl {
       kLog.debug("GetSecrets while another is pending -> NoSecrets");
       result.returnError(
           sdbus::Error{
-              sdbus::Error::Name{"org.freedesktop.NetworkManager.SecretManager.NoSecrets"},
+              "org.freedesktop.NetworkManager.SecretManager.NoSecrets",
               "another secret request is already pending"
           }
       );
@@ -120,7 +119,7 @@ struct NetworkSecretAgent::Impl {
       return;
     }
     pendingResult->returnError(
-        sdbus::Error{sdbus::Error::Name{"org.freedesktop.NetworkManager.SecretManager.UserCanceled"}, reason}
+        sdbus::Error{"org.freedesktop.NetworkManager.SecretManager.UserCanceled", reason}
     );
     pendingResult.reset();
     pendingSettingName.clear();
@@ -141,9 +140,7 @@ struct NetworkSecretAgent::Impl {
 NetworkSecretAgent::NetworkSecretAgent(SystemBus& bus) : m_impl(std::make_unique<Impl>(bus)) {
   m_impl->object = sdbus::createObject(bus.connection(), kAgentObjectPath);
 
-  m_impl->object
-      ->addVTable(
-          sdbus::registerMethod("GetSecrets")
+  m_impl->object->registerMethod("GetSecrets")
               .withInputParamNames("connection", "connection_path", "setting_name", "hints", "flags")
               .withOutputParamNames("secrets")
               .implementedAs([this](
@@ -155,20 +152,23 @@ NetworkSecretAgent::NetworkSecretAgent(SystemBus& bus) : m_impl(std::make_unique
                     std::move(result), std::move(connection), std::move(connectionPath), std::move(settingName),
                     std::move(hints), flags
                 );
-              }),
-          sdbus::registerMethod("CancelGetSecrets")
+              })
+      .onInterface(kAgentInterface);
+  m_impl->object->registerMethod("CancelGetSecrets")
               .withInputParamNames("connection_path", "setting_name")
               .implementedAs([this](const sdbus::ObjectPath& /*connectionPath*/, const std::string& /*settingName*/) {
                 m_impl->cancelPending("NM canceled");
-              }),
-          sdbus::registerMethod("SaveSecrets")
-              .withInputParamNames("connection", "connection_path")
-              .implementedAs([](const SecretsDict& /*connection*/, const sdbus::ObjectPath& /*connectionPath*/) {}),
-          sdbus::registerMethod("DeleteSecrets")
+              })
+      .onInterface(kAgentInterface);
+  m_impl->object->registerMethod("SaveSecrets")
               .withInputParamNames("connection", "connection_path")
               .implementedAs([](const SecretsDict& /*connection*/, const sdbus::ObjectPath& /*connectionPath*/) {})
-      )
-      .forInterface(kAgentInterface);
+      .onInterface(kAgentInterface);
+  m_impl->object->registerMethod("DeleteSecrets")
+              .withInputParamNames("connection", "connection_path")
+              .implementedAs([](const SecretsDict& /*connection*/, const sdbus::ObjectPath& /*connectionPath*/) {})
+      .onInterface(kAgentInterface);
+  m_impl->object->finishRegistration();
 
   // Register with NM's agent manager.
   try {

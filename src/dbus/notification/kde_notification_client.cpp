@@ -13,7 +13,7 @@
 namespace {
   constexpr Logger kLog("notification");
 
-  const sdbus::ServiceName kPlasmaNotifications{"org.freedesktop.Notifications"};
+  const std::string kPlasmaNotifications{"org.freedesktop.Notifications"};
   const sdbus::ObjectPath kPlasmaNotificationsPath{"/org/freedesktop/Notifications"};
   const sdbus::ObjectPath kWatcherPath{"/NotificationWatcher"};
   constexpr auto kFdoNotificationsInterface = "org.freedesktop.Notifications";
@@ -25,14 +25,12 @@ KdeNotificationClient::KdeNotificationClient(SessionBus& bus, NotificationManage
     : m_bus(bus), m_manager(manager) {
   if (!compositors::isKde()) {
     throw sdbus::Error(
-        sdbus::Error::Name{"org.freedesktop.DBus.Error.Failed"}, "KDE notification client requires KDE Plasma"
+        "org.freedesktop.DBus.Error.Failed", "KDE notification client requires KDE Plasma"
     );
   }
 
   m_watcherObject = sdbus::createObject(m_bus.connection(), kWatcherPath);
-  m_watcherObject
-      ->addVTable(
-          sdbus::registerMethod("Notify")
+  m_watcherObject->registerMethod("Notify")
               .withInputParamNames(
                   "id", "app_name", "replaces_id", "app_icon", "summary", "body", "actions", "hints", "timeout"
               )
@@ -41,13 +39,13 @@ KdeNotificationClient::KdeNotificationClient(SessionBus& bus, NotificationManage
                       uint32_t id, const std::string& appName, uint32_t replacesId, const std::string& appIcon,
                       const std::string& summary, const std::string& body, const std::vector<std::string>& actions,
                       const std::map<std::string, sdbus::Variant>& hints, int32_t timeout
-                  ) { onWatcherNotify(id, appName, replacesId, appIcon, summary, body, actions, hints, timeout); }
-              ),
-          sdbus::registerMethod("CloseNotification").withInputParamNames("id").implementedAs([this](uint32_t id) {
+                  ) { onWatcherNotify(id, appName, replacesId, appIcon, summary, body, actions, hints, timeout); })
+      .onInterface(kKdeNotificationWatcherInterface);
+  m_watcherObject->registerMethod("CloseNotification").withInputParamNames("id").implementedAs([this](uint32_t id) {
             onWatcherCloseNotification(id);
           })
-      )
-      .forInterface(kKdeNotificationWatcherInterface);
+      .onInterface(kKdeNotificationWatcherInterface);
+  m_watcherObject->finishRegistration();
 
   m_plasmaProxy = sdbus::createProxy(m_bus.connection(), kPlasmaNotifications, kPlasmaNotificationsPath);
 

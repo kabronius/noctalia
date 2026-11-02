@@ -16,7 +16,7 @@
 namespace {
   constexpr Logger kLog("logind");
 
-  const sdbus::ServiceName kLogindBusName{"org.freedesktop.login1"};
+  const std::string kLogindBusName{"org.freedesktop.login1"};
   const sdbus::ObjectPath kLogindObjectPath{"/org/freedesktop/login1"};
   constexpr auto kLogindManagerInterface = "org.freedesktop.login1.Manager";
   constexpr auto kLogindSessionInterface = "org.freedesktop.login1.Session";

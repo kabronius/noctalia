@@ -28,13 +28,13 @@ SessionBus::SessionBus() : m_connection(sdbus::createSessionBusConnection()) {}
 
 sdbus::IConnection::PollData SessionBus::getPollData() const { return m_connection->getEventLoopPollData(); }
 
-void SessionBus::processPendingEvents() {
+void SessionBus::processPendingRequests() {
   m_hasPendingEvents = false;
 
   const auto batchStart = std::chrono::steady_clock::now();
   for (int processed = 0; processed < kMaxEventsPerDispatch; ++processed) {
     const auto eventStart = std::chrono::steady_clock::now();
-    const bool processedEvent = m_connection->processPendingEvent();
+    const bool processedEvent = m_connection->processPendingRequest();
     if (!processedEvent) {
       return;
     }

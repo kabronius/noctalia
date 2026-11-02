@@ -232,7 +232,7 @@ void Application::installNotificationBusNameWatch() {
   }
 
   m_notificationBusNameWatchProxy = sdbus::createProxy(
-      m_bus->connection(), sdbus::ServiceName{"org.freedesktop.DBus"}, sdbus::ObjectPath{"/org/freedesktop/DBus"}
+      m_bus->connection(), "org.freedesktop.DBus", sdbus::ObjectPath{"/org/freedesktop/DBus"}
   );
   m_notificationBusNameWatchProxy->uponSignal("NameOwnerChanged")
       .onInterface("org.freedesktop.DBus")
@@ -254,7 +254,7 @@ void Application::installSecretServiceNameWatch() {
   }
 
   m_secretServiceNameWatchProxy = sdbus::createProxy(
-      m_bus->connection(), sdbus::ServiceName{"org.freedesktop.DBus"}, sdbus::ObjectPath{"/org/freedesktop/DBus"}
+      m_bus->connection(), "org.freedesktop.DBus", sdbus::ObjectPath{"/org/freedesktop/DBus"}
   );
   m_secretServiceNameWatchProxy->uponSignal("NameOwnerChanged")
       .onInterface("org.freedesktop.DBus")

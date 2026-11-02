@@ -12,7 +12,7 @@ public:
   [[nodiscard]] sdbus::IConnection::PollData getPollData() const;
   [[nodiscard]] bool hasPendingEvents() const noexcept { return m_hasPendingEvents; }
   [[nodiscard]] bool nameHasOwner(std::string_view name) const;
-  void processPendingEvents();
+  void processPendingRequests();
 
 private:
   std::unique_ptr<sdbus::IConnection> m_connection;

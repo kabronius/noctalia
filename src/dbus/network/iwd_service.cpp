@@ -20,7 +20,7 @@ namespace {
 
   constexpr Logger kLog("iwd");
 
-  const sdbus::ServiceName kIwdBusName{"net.connman.iwd"};
+  const std::string kIwdBusName{"net.connman.iwd"};
   const sdbus::ObjectPath kRootPath{"/"};
   constexpr auto kDeviceInterface = "net.connman.iwd.Device";
   constexpr auto kStationInterface = "net.connman.iwd.Station";
@@ -86,7 +86,7 @@ namespace {
 IwdService::IwdService(SystemBus& bus) : m_bus(bus) {
   if (!bus.nameHasOwner("net.connman.iwd")) {
     throw sdbus::Error(
-        sdbus::Error::Name{"org.freedesktop.DBus.Error.ServiceUnknown"},
+        "org.freedesktop.DBus.Error.ServiceUnknown",
         "The name net.connman.iwd was not provided by any .service files"
     );
   }
@@ -310,7 +310,7 @@ bool IwdService::activateAccessPoint(const AccessPointInfo& ap) {
     m_connectProxy = sdbus::createProxy(m_bus.connection(), kIwdBusName, sdbus::ObjectPath{ap.path});
     m_connectProxy->callMethodAsync("Connect")
         .onInterface(kNetworkInterface)
-        .uponReplyInvoke([this, ssid = ap.ssid](std::optional<sdbus::Error> error) {
+        .uponReplyInvoke([this, ssid = ap.ssid](const sdbus::Error* error) {
           // consumed by the agent, or abandoned, never keep it around
           m_pendingPsk.clear();
           if (error) {

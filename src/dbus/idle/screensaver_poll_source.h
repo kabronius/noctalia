@@ -16,14 +16,14 @@ public:
   }
 
   void dispatch(const std::vector<pollfd>& /*fds*/, std::size_t /*startIdx*/) override {
-    m_service.processPendingEvents();
+    m_service.processPendingRequests();
   }
 
 protected:
   void doAddPollFds(std::vector<pollfd>& fds) override {
     const auto pollData = m_service.getPollData();
     fds.push_back({.fd = pollData.fd, .events = pollData.events, .revents = 0});
-    fds.push_back({.fd = pollData.eventFd, .events = POLLIN, .revents = 0});
+    // sdbus-c++ 1.4 PollData has only fd (no eventFd).
   }
 
 private:

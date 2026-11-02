@@ -62,7 +62,7 @@ struct WirePlumberMixer::Impl {
     // pumps, so their completion callbacks never fire and the mixer silently never activates.
     g_main_context_push_thread_default(context);
 
-    core = wp_core_new(context, nullptr, nullptr);
+    core = wp_core_new(context, nullptr);
 
     if (wp_core_connect(core) == FALSE) {
       kLog.warn("could not connect to PipeWire; device volume control unavailable");
@@ -79,13 +79,34 @@ struct WirePlumberMixer::Impl {
 
     kLog.info("connected; loading mixer-api / default-nodes-api modules");
 
-    wp_core_load_component(
-        core, "libwireplumber-module-mixer-api", "module", nullptr, nullptr, cancellable, &Impl::onMixerLoaded, this
-    );
-    wp_core_load_component(
-        core, "libwireplumber-module-default-nodes-api", "module", nullptr, nullptr, cancellable,
-        &Impl::onDefaultNodesLoaded, this
-    );
+    // WirePlumber 0.4: wp_core_load_component is synchronous.
+    GError* loadErr = nullptr;
+    if (wp_core_load_component(core, "libwireplumber-module-mixer-api", "module", nullptr, &loadErr) == FALSE) {
+      kLog.warn("mixer-api load failed: {}", loadErr != nullptr ? loadErr->message : "unknown");
+      g_clear_error(&loadErr);
+    } else {
+      mixer = wp_plugin_find(core, "mixer-api");
+      if (mixer != nullptr) {
+        wp_object_activate(WP_OBJECT(mixer), WP_PLUGIN_FEATURE_ENABLED, nullptr, &Impl::onMixerActivated, this);
+      } else {
+        kLog.warn("mixer-api plugin not found after load");
+      }
+    }
+
+    loadErr = nullptr;
+    if (wp_core_load_component(core, "libwireplumber-module-default-nodes-api", "module", nullptr, &loadErr) == FALSE) {
+      kLog.warn("default-nodes-api load failed: {}", loadErr != nullptr ? loadErr->message : "unknown");
+      g_clear_error(&loadErr);
+    } else {
+      defaultNodes = wp_plugin_find(core, "default-nodes-api");
+      if (defaultNodes != nullptr) {
+        wp_object_activate(
+            WP_OBJECT(defaultNodes), WP_PLUGIN_FEATURE_ENABLED, nullptr, &Impl::onDefaultNodesActivated, this
+        );
+      } else {
+        kLog.warn("default-nodes-api plugin not found after load");
+      }
+    }
 
     // If neither module reports ready within a few seconds, device volume/mute is silently dead
     // (every write no-ops until the mixer activates). Surface it so users have something to report.
@@ -132,22 +153,8 @@ struct WirePlumberMixer::Impl {
     return G_SOURCE_REMOVE;
   }
 
-  static void onMixerLoaded(GObject* /*source*/, GAsyncResult* res, gpointer data) noexcept {
-    auto* self = static_cast<Impl*>(data);
-    GError* err = nullptr;
-    if (wp_core_load_component_finish(self->core, res, &err) == FALSE) {
-      kLog.warn("mixer-api load failed: {}", err != nullptr ? err->message : "unknown");
-      g_clear_error(&err);
-      return;
-    }
-
-    self->mixer = wp_plugin_find(self->core, "mixer-api");
-    if (self->mixer == nullptr) {
-      kLog.warn("mixer-api plugin not found after load");
-      return;
-    }
-
-    wp_object_activate(WP_OBJECT(self->mixer), WP_PLUGIN_FEATURE_ENABLED, nullptr, &Impl::onMixerActivated, self);
+  static void onMixerLoaded(GObject* /*source*/, GAsyncResult* /*res*/, gpointer /*data*/) noexcept {
+    // Unused on WirePlumber 0.4 (synchronous load_component).
   }
 
   static void onMixerActivated(GObject* /*source*/, GAsyncResult* res, gpointer data) noexcept {
@@ -241,24 +248,8 @@ struct WirePlumberMixer::Impl {
     }
   }
 
-  static void onDefaultNodesLoaded(GObject* /*source*/, GAsyncResult* res, gpointer data) noexcept {
-    auto* self = static_cast<Impl*>(data);
-    GError* err = nullptr;
-    if (wp_core_load_component_finish(self->core, res, &err) == FALSE) {
-      kLog.warn("default-nodes-api load failed: {}", err != nullptr ? err->message : "unknown");
-      g_clear_error(&err);
-      return;
-    }
-
-    self->defaultNodes = wp_plugin_find(self->core, "default-nodes-api");
-    if (self->defaultNodes == nullptr) {
-      kLog.warn("default-nodes-api plugin not found after load");
-      return;
-    }
-
-    wp_object_activate(
-        WP_OBJECT(self->defaultNodes), WP_PLUGIN_FEATURE_ENABLED, nullptr, &Impl::onDefaultNodesActivated, self
-    );
+  static void onDefaultNodesLoaded(GObject* /*source*/, GAsyncResult* /*res*/, gpointer /*data*/) noexcept {
+    // Unused on WirePlumber 0.4 (synchronous load_component).
   }
 
   static void onDefaultNodesActivated(GObject* /*source*/, GAsyncResult* res, gpointer data) noexcept {

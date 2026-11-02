@@ -17,12 +17,12 @@ namespace {
 
   constexpr Logger kLog("kwin_active_window");
 
-  const sdbus::ServiceName kBusName{"dev.noctalia.KWinActiveWindow"};
+  const std::string kBusName{"dev.noctalia.KWinActiveWindow"};
   const sdbus::ObjectPath kObjectPath{"/dev/noctalia/KWinActiveWindow"};
   constexpr auto kInterface = "dev.noctalia.KWinActiveWindow";
   constexpr auto kScriptLabel = "noctalia-active-window";
 
-  const sdbus::ServiceName kKwinBusName{"org.kde.KWin"};
+  const std::string kKwinBusName{"org.kde.KWin"};
   const sdbus::ObjectPath kKwinPath{"/KWin"};
   const sdbus::ObjectPath kKwinScriptingPath{"/Scripting"};
   constexpr auto kKwinInterface = "org.kde.KWin";
@@ -290,20 +290,18 @@ namespace compositors::kde {
 
     try {
       m_object = sdbus::createObject(m_bus.connection(), kObjectPath);
-      m_object
-          ->addVTable(
-              sdbus::registerMethod("notifyActiveWindow")
+      m_object->registerMethod("notifyActiveWindow")
                   .withInputParamNames("caption", "resourceClass", "uuid")
                   .implementedAs(
                       [this](const std::string& caption, const std::string& resourceClass, const std::string& uuid) {
                         onNotifyActiveWindow(caption, resourceClass, uuid);
-                      }
-                  ),
-              sdbus::registerMethod("notifyWindowList")
+                      })
+          .onInterface(kInterface);
+      m_object->registerMethod("notifyWindowList")
                   .withInputParamNames("payload")
                   .implementedAs([this](const std::string& payload) { onNotifyWindowList(payload); })
-          )
-          .forInterface(kInterface);
+          .onInterface(kInterface);
+      m_object->finishRegistration();
     } catch (const sdbus::Error& e) {
       kLog.warn("failed to export kwin active-window dbus object: {}", e.getMessage());
       m_object.reset();
