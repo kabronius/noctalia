@@ -170,6 +170,7 @@ PowerProfilesService::PowerProfilesService(SystemBus& bus) : m_bus(bus) {
           refresh();
         }
       });
+  m_proxy->finishRegistration();
 
   refresh();
 }

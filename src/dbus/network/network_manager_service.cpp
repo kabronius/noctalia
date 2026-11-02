@@ -201,6 +201,7 @@ NetworkManagerService::NetworkManagerService(SystemBus& bus) : m_bus(bus) {
           });
         }
       });
+  m_nm->finishRegistration();
 
   requestRebind();
   requestScan();
@@ -494,6 +495,7 @@ void NetworkManagerService::watchPendingAccessPointActivation(
           } catch (const sdbus::Error&) {
           }
         });
+    pending->activeProxy->finishRegistration();
 
     auto* activeProxy = pending->activeProxy.get();
     m_pendingApActivations[activePath] = std::move(pending);
@@ -1447,6 +1449,7 @@ void NetworkManagerService::reconcileVpnActiveWatchers(const std::set<std::strin
               refresh();
             }
           });
+      proxy->finishRegistration();
       m_vpnActiveWatchers.emplace(activePath, std::move(proxy));
     } catch (const sdbus::Error& e) {
       kLog.debug("vpn active watcher failed {}: {}", activePath, e.what());
@@ -1486,6 +1489,7 @@ void NetworkManagerService::ensureWifiDeviceSubscribed(const std::string& device
             }
           }
         });
+    proxy->finishRegistration();
     m_wifiDevices.emplace(devicePath, std::move(proxy));
   } catch (const sdbus::Error& e) {
     kLog.debug("wifi device subscribe failed {}: {}", devicePath, e.what());
@@ -2005,6 +2009,7 @@ void NetworkManagerService::adoptActiveConnection(const std::string& connectionP
                 requestRebind();
               }
             });
+        m_activeConnection->finishRegistration();
       } catch (const sdbus::Error& e) {
         kLog.debug("active connection proxy failed: {}", e.what());
         m_activeConnection.reset();
@@ -2060,6 +2065,7 @@ void NetworkManagerService::rebindActiveDevice(const std::string& devicePath) {
             }
           }
         });
+    m_activeDevice->finishRegistration();
   } catch (const sdbus::Error& e) {
     kLog.debug("device proxy failed: {}", e.what());
     m_activeDevice.reset();
@@ -2121,6 +2127,7 @@ void NetworkManagerService::rebindActiveAccessPoint(const std::string& apPath) {
             refresh();
           }
         });
+    m_activeAp->finishRegistration();
   } catch (const sdbus::Error& e) {
     kLog.debug("AP proxy failed: {}", e.what());
     m_activeAp.reset();

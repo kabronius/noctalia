@@ -69,6 +69,7 @@ KeyboardBacklightService::KeyboardBacklightService(SystemBus& bus) : m_bus(bus) 
       rescanDevices();
     }
   });
+  m_upowerProxy->finishRegistration();
   rescanDevices();
 }
 
@@ -118,6 +119,7 @@ void KeyboardBacklightService::rescanDevices() {
             changed.brightness = brightness;
             publishBrightness(changed);
           });
+      device->proxy->finishRegistration();
       devices.push_back(std::move(device));
     } catch (const sdbus::Error& e) {
       kLog.warn("failed to initialize keyboard backlight {}: {}", std::string(path), e.what());

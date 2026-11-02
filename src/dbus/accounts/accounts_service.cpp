@@ -89,6 +89,7 @@ AccountsService::AccountsService(SystemBus& bus) : m_bus(bus) {
           kLog.warn("failed to decode IconFile property change: {}", e.what());
         }
       });
+  m_userProxy->finishRegistration();
 
   readIconFile();
   kLog.info("session user avatar path: {}", m_iconFile.empty() ? "<unset>" : m_iconFile);

@@ -1529,6 +1529,7 @@ void MprisService::registerBusSignals() {
 
         addOrRefreshPlayer(name);
       });
+  m_dbusProxy->finishRegistration();
 }
 
 void MprisService::discoverPlayers() {
@@ -1725,6 +1726,7 @@ void MprisService::addOrRefreshPlayer(const std::string& busName) {
         m_changeCallback();
       }
     });
+    proxyIt->second->finishRegistration();
   }
 
   const bool hadPositionSignal = m_pendingPositionSignalRefresh[busName];

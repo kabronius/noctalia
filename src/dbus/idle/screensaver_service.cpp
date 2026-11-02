@@ -109,6 +109,7 @@ void ScreenSaverService::registerScreenSaver() {
           kLog.info("screensaver: cleared {} inhibit(s) after client disconnect", removed);
         }
       });
+  m_dbusProxy->finishRegistration();
 
   for (const auto& path : kObjectPaths) {
     try {
@@ -171,6 +172,7 @@ void ScreenSaverService::registerLogindIdleMonitor(SystemBus* systemBus) {
           }
           applyLogindBlockInhibited(it->second.get<std::string>());
         });
+    m_logindProxy->finishRegistration();
 
     const auto blockInhibited =
         m_logindProxy->getProperty("BlockInhibited").onInterface(kLogindManagerInterface).get<std::string>();

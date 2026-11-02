@@ -290,6 +290,7 @@ struct BluetoothService::Impl {
                   const std::string& interfaceName, const InterfaceProps& changed,
                   const std::vector<std::string>& /*invalidated*/
               ) { onPropertiesChanged(objectPath, interfaceName, changed); });
+    proxy->finishRegistration();
     auto* raw = proxy.get();
     objectProxies.emplace(path, std::move(proxy));
     return raw;
@@ -472,6 +473,7 @@ BluetoothService::BluetoothService(SystemBus& bus, UPowerService* upowerService)
       .call([this](const sdbus::ObjectPath& path, const std::vector<std::string>& interfaces) {
         m_impl->onInterfacesRemoved(path, interfaces);
       });
+  m_impl->root->finishRegistration();
 
   refresh();
 }

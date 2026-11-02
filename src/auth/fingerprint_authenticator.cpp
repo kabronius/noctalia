@@ -82,6 +82,7 @@ FingerprintAuthenticator::FingerprintAuthenticator(SystemBus& bus) : m_bus(bus) 
         startVerify(false);
       }
     });
+    m_loginManager->finishRegistration();
   } catch (const sdbus::Error& e) {
     kLog.debug("could not monitor PrepareForSleep: {}", e.what());
     m_loginManager.reset();
@@ -166,6 +167,7 @@ bool FingerprintAuthenticator::createDeviceProxy() {
         } catch (const sdbus::Error&) {
         }
       });
+  m_device->finishRegistration();
 
   return true;
 }

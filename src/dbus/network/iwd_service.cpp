@@ -98,6 +98,7 @@ IwdService::IwdService(SystemBus& bus) : m_bus(bus) {
   m_iwd->uponSignal("InterfacesRemoved")
       .onInterface(kObjectManagerInterface)
       .call([this](const sdbus::ObjectPath&, const std::vector<std::string>&) { refresh(); });
+  m_iwd->finishRegistration();
 
   refresh();
 }
@@ -144,6 +145,7 @@ void IwdService::subscribeObject(const std::string& path, const ObjectInterfaces
             refresh();
           }
         });
+    proxy->finishRegistration();
     m_objectProxies.emplace(path, std::move(proxy));
   } catch (const sdbus::Error& e) {
     kLog.debug("failed to subscribe IWD object {}: {}", path, e.what());

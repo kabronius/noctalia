@@ -72,6 +72,7 @@ LogindService::LogindService(SystemBus& bus) : m_bus(bus) {
       m_prepareForSleepCallback(sleeping);
     }
   });
+  m_managerProxy->finishRegistration();
 }
 
 LogindService::~LogindService() {
@@ -101,6 +102,7 @@ void LogindService::ensureSessionLockMonitor() {
       m_unlockCallback();
     }
   });
+  m_sessionProxy->finishRegistration();
   kLog.info("logind session lock monitor active ({})", std::string(sessionPath->c_str()));
 }
 

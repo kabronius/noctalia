@@ -245,6 +245,7 @@ void Application::installNotificationBusNameWatch() {
           syncNotificationDaemon();
         });
       });
+  m_notificationBusNameWatchProxy->finishRegistration();
   m_notificationBusNameWatchInstalled = true;
 }
 
@@ -272,6 +273,7 @@ void Application::installSecretServiceNameWatch() {
         kLog.info("secret service provider appeared on {}", kSecretServiceBusName);
         DeferredCall::callLater([this]() { retrySecretServiceConsumers(); });
       });
+  m_secretServiceNameWatchProxy->finishRegistration();
   m_secretServiceNameWatchInstalled = true;
 
   // The provider may have claimed the name between our first lookup and this watch. Consumers are

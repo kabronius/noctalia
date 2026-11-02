@@ -120,6 +120,7 @@ WpaSupplicantService::WpaSupplicantService(SystemBus& bus) : m_bus(bus) {
     m_interfaces.erase(std::string(path));
     scheduleRebuild();
   });
+  m_wpa->finishRegistration();
 
   try {
     const auto ifaces =
@@ -170,6 +171,7 @@ void WpaSupplicantService::subscribeInterface(const std::string& ifacePath) {
       m_bssProxies.erase(std::string(bssPath));
       scheduleRebuild();
     });
+    proxy->finishRegistration();
 
     // Pre-populate BSS cache for already-visible BSSes.
     try {

@@ -580,6 +580,7 @@ void TrayService::startWithWatcherDetection() {
           removeItemsForBusName(name);
         }
       });
+  m_dbusProxy->finishRegistration();
 
   const bool useClientMode = externalWatcherHasOwner();
   if (useClientMode) {
@@ -716,6 +717,7 @@ void TrayService::connectToExternalWatcher() {
     m_watcherProxy->uponSignal("StatusNotifierItemUnregistered")
         .onInterface(kWatcherInterface)
         .call([this](const std::string& service) { onExternalItemUnregistered(service); });
+    m_watcherProxy->finishRegistration();
 
     const auto registered = m_watcherProxy->getProperty("RegisteredStatusNotifierItems")
                                 .onInterface(kWatcherInterface)
@@ -1306,6 +1308,7 @@ void TrayService::ensureMenuCache(const std::string& itemId, const std::string& 
             emitChanged();
           }
         });
+    proxy->finishRegistration();
 
     MenuCache cache;
     cache.proxy = std::move(proxy);

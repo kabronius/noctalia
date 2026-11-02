@@ -306,6 +306,7 @@ UPowerService::UPowerService(SystemBus& bus) : m_bus(bus) {
     invalidateChargeThresholdRequest(std::string(path));
     rescanDevices();
   });
+  m_upowerProxy->finishRegistration();
 
   if (SysUtils::isEnvFlagOn("NOCTALIA_DUMMY_BATTERY")) {
     m_dummyDevice = makeDummyBatteryDevice();
@@ -405,6 +406,7 @@ void UPowerService::rescanDevices() {
               emitChangedIfNeeded(changes.devicesChanged, changes.chargeLimitChanged, changes.deviceCatalogChanged);
             }
           });
+      proxy->finishRegistration();
 
       std::optional<std::uint64_t> requestId;
       if (previous != m_devices.end()) {
@@ -715,6 +717,7 @@ void UPowerService::refreshDisplayDeviceProxy() {
             (void)refreshDefaultState();
           }
         });
+    proxy->finishRegistration();
 
     m_displayDevicePath = nextPath;
     m_displayDeviceProxy = std::move(proxy);
