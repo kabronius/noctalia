@@ -1,0 +1,44 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+export DH_VERBOSE = 1
+
+# Prefer pre-built release tree when present.
+DEB_BUILD_DIR ?= $(if $(wildcard build-release/build.ninja),build-release,obj-$(DEB_HOST_MULTIARCH))
+
+# Prefer GCC 14 on Ubuntu 24.04 for full C++23 support
+ifeq ($(shell test -x /usr/bin/g++-14 && echo yes),yes)
+  export CC = gcc-14
+  export CXX = g++-14
+endif
+
+%:
+	dh $@ --buildsystem=meson --builddirectory=$(DEB_BUILD_DIR)
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		--buildtype=release \
+		-Dtests=disabled \
+		-Db_lto=false \
+		-Djemalloc=auto
+
+override_dh_auto_build:
+	dh_auto_build
+	$(DEB_BUILD_DIR)/noctalia completions bash > debian/noctalia.bash-completion || true
+	$(DEB_BUILD_DIR)/noctalia completions zsh  > debian/noctalia.zsh || true
+	$(DEB_BUILD_DIR)/noctalia completions fish > debian/noctalia.fish || true
+
+override_dh_auto_install:
+	dh_auto_install
+	install -D -m 0644 debian/noctalia.bash-completion \
+		debian/tmp/usr/share/bash-completion/completions/noctalia || true
+	install -D -m 0644 debian/noctalia.zsh \
+		debian/tmp/usr/share/zsh/site-functions/_noctalia || true
+	install -D -m 0644 debian/noctalia.fish \
+		debian/tmp/usr/share/fish/vendor_completions.d/noctalia.fish || true
+
+override_dh_shlibdeps:
+	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info
+
+# Tests are disabled via meson option.
+override_dh_auto_test:
+	:

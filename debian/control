@@ -1,0 +1,75 @@
+Source: noctalia
+Section: x11
+Priority: optional
+Maintainer: Noctalia Maintainers <no-reply@example.com>
+Build-Depends: debhelper-compat (= 13),
+               meson,
+               ninja-build,
+               pkg-config,
+               g++ | g++-14,
+               gcc | gcc-14,
+               libwayland-dev,
+               wayland-protocols,
+               libegl-dev,
+               libgles-dev,
+               libepoxy-dev,
+               libfreetype-dev,
+               libfontconfig-dev,
+               libcairo2-dev,
+               libpango1.0-dev,
+               libharfbuzz-dev,
+               libxkbcommon-dev,
+               libglib2.0-dev,
+               libsecret-1-dev,
+               libsodium-dev,
+               libsdbus-c++-dev,
+               libpipewire-0.3-dev,
+               libwireplumber-0.4-dev,
+               libpam0g-dev,
+               libpolkit-agent-1-dev,
+               libpolkit-gobject-1-dev,
+               libcurl4-openssl-dev,
+               libwebp-dev,
+               libjxl-dev,
+               libsndfile1-dev,
+               librsvg2-dev,
+               libqalculate-dev,
+               libxml2-dev,
+               libmd4c-dev,
+               libtomlplusplus-dev,
+               libical-dev,
+               nlohmann-json3-dev,
+               libstb-dev,
+               libjemalloc-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/noctalia-dev/noctalia
+Vcs-Git: https://github.com/noctalia-dev/noctalia.git
+Vcs-Browser: https://github.com/noctalia-dev/noctalia
+
+Package: noctalia
+Architecture: amd64 arm64
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         pipewire,
+         wireplumber,
+         libsecret-1-0,
+         polkitd | policykit-1,
+         git,
+         fonts-dejavu-core | fonts-liberation,
+         libpam0g,
+         libjxl0.7,
+         libwebp7 | libwebp,
+         librsvg2-2,
+         libqalculate22t64 | libqalculate-dev,
+         libsndfile1,
+         libical3t64 | libical-dev
+Recommends: upower,
+            ddcutil
+Description: A sleek, customizable desktop shell crafted for Wayland.
+ Noctalia is a full desktop shell for Wayland compositors. It provides
+ bars, dock, launcher, notifications, control center, wallpaper, lock
+ screen, and theming. It is not a compositor or display manager.
+ .
+ Built for Ubuntu 24.04 (Noble): WirePlumber 0.4, sdbus-c++ 1.4, and a
+ vendored stb_image_resize2.h. D-Bus services (notifications, tray,
+ MPRIS, agents) remain enabled via the sdbus-c++ 1.4 registration API.

@@ -1,0 +1,27 @@
+noctalia (5.0.1-0ubuntu1~24.04) noble; urgency=medium
+
+  * Rebase on upstream v5.0.1, which also fixes blur detection with
+    wayland-protocols 1.45; the local workaround is dropped.
+  * Port the new UPower charge-threshold code to sdbus-c++ 1.4.
+  * Call finishRegistration() on every D-Bus proxy: sdbus-c++ 1.4 only
+    subscribes to signals there, so tray items, logind PrepareForSleep,
+    UPower, NetworkManager and BlueZ signals were never delivered.
+
+ -- Noctalia Packager <packager@example.com>  Mon, 02 Nov 2026 00:00:00 +0000
+
+noctalia (5.0.0-0ubuntu2~24.04) noble; urgency=medium
+
+  * Fix compositor blur detection: wayland-protocols 1.45 on Ubuntu 24.04
+    declares ext-background-effect capability "blur" as value 0, so the
+    generated mask never matched and blur was always reported unsupported.
+
+ -- Noctalia Packager <packager@example.com>  Fri, 30 Oct 2026 00:00:00 +0000
+
+noctalia (5.0.0-0ubuntu1~24.04) noble; urgency=medium
+
+  * Ubuntu 24.04 packaging of Noctalia 5.0.0.
+  * Compatibility: WirePlumber 0.4, sdbus-c++ 1.4 (full D-Bus vtables via
+    registerMethod/registerSignal), vendored stb_image_resize2.h, and
+    Wayland client display plumbing without wl_proxy_get_display.
+
+ -- Noctalia Packager <packager@example.com>  Mon, 17 Aug 2026 00:00:00 +0000
